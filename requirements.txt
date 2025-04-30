@@ -1,0 +1,4 @@
+fonttools>=4.39.4
+reportlab>=4.0.4
+numpy>=1.24.3
+sentencepiece>=0.1.99
