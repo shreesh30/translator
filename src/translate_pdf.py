@@ -127,8 +127,6 @@ def batch_translate(elements, src_lang, tgt_lang, model, tokenizer, ip):
     for elem, translated_text in zip(elements, translations):
         elem['content'] = translated_text
 
-    print(f"====================================elements: {elements}")
-
     return translations[0]
 
 def initialize_model_and_tokenizer(ckpt_dir, quantization):
