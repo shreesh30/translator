@@ -1,4 +1,12 @@
-fonttools>=4.39.4
-reportlab>=4.0.4
-numpy>=1.24.3
-sentencepiece>=0.1.99
+# requirements.txt
+# Core with NumPy 1.x compatibility
+bitsandbytes==0.41.1  # Add this line
+numpy==1.26.4
+torch==2.2.2
+transformers==4.40.1
+python-docx==1.1.2
+pdf2docx==0.5.8
+reportlab==4.1.0
+fonttools==4.51.0
+PyMuPDF==1.25.5
+opencv-python-headless==4.11.0.86
