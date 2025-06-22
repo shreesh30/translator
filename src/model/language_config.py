@@ -1,0 +1,37 @@
+from dataclasses import dataclass
+
+
+@dataclass
+class LanguageConfig:
+    target_language: str
+    target_language_key: str
+    font_path: str
+    font_multiplier: float
+    line_spacing_multiplier: float
+    source_language: str = None
+    source_language_key: str = None
+
+    def get_target_language(self):
+        return self.target_language
+
+    def get_target_language_key(self):
+        return self.target_language_key
+
+    def get_font_path(self):
+        return self.font_path
+
+    def get_font_multiplier(self):
+        return self.font_multiplier
+
+    def get_line_spacing_multiplier(self):
+        return self.line_spacing_multiplier
+
+    def get_source_language(self):
+        if self.source_language is None:
+            return 'English'
+        return self.source_language
+
+    def get_source_language_key(self):
+        if self.source_language_key is None:
+            return 'eng_Latn'
+        return self.source_language_key
