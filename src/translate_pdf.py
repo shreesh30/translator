@@ -48,7 +48,9 @@ class PDFTranslator:
         self.source_language = self.language_config.get_source_language()
         self.source_language_key = self.language_config.get_source_language_key()
 
-        self.font_name = self.load_and_register_font(self.language_config.get_font_path())
+        self.font_name = self.load_and_register_font(self.language_config.get_target_font_path())
+
+        # self.source_font_name = self.load_and_register_font('resource/fonts/Walkman-Chanakya905.ttf')
 
     @staticmethod
     def load_and_register_font(font_path):
@@ -297,14 +299,64 @@ class PDFTranslator:
             "bbox": paragraph_bbox
         }
 
+    def group_into_lines(self, spans):
+        """Group text spans into lines based on shared Y position and page number.
+        Does not store individual spans — only final line text and bbox.
+        """
+        lines = []
+        current_line = None
 
-    def group_into_paragraphs(self, spans):
+        for span in spans:
+            if not span.get("text"):
+                continue  # skip empty
+
+            is_new_line = (
+                    current_line is None or
+                    span["page_num"] != current_line["page_num"] or
+                    int(span["bbox"].y0) != int(current_line["bbox"].y0)
+            )
+
+            if is_new_line:
+                if current_line:
+                    lines.append(current_line)
+                current_line = {
+                    "text": span["text"],
+                    "page_num": span["page_num"],
+                    "line_bbox": span["line_bbox"],
+                    "bbox": fitz.Rect(span["bbox"]),
+                    "origin": span["origin"],
+                    "size" : span["size"]
+                }
+            else:
+                prev_bbox = current_line["bbox"]
+                curr_bbox = span["bbox"]
+
+                # Insert space based on x1-x0 alignment
+                if int(prev_bbox.x1) == int(curr_bbox.x0):
+                    current_line["text"] += span["text"]
+                else:
+                    current_line["text"] += " " + span["text"]
+
+                # Expand bbox
+                x0 = min(current_line["bbox"].x0, curr_bbox.x0)
+                y0 = min(current_line["bbox"].y0, curr_bbox.y0)
+                x1 = max(current_line["bbox"].x1, curr_bbox.x1)
+                y1 = max(current_line["bbox"].y1, curr_bbox.y1)
+                current_line["bbox"] = fitz.Rect(x0, y0, x1, y1)
+
+        if current_line:
+            lines.append(current_line)
+
+        return lines
+
+
+    def group_into_paragraphs(self, lines):
         """Group text elements into paragraphs based on vertical proximity"""
         paragraphs = []
         current_para = []
 
-        for i, span in enumerate(spans):
-            if i > 0 and (span['page_num']!=spans[i-1]['page_num'] or  (int(span['origin'][1])-int(spans[i-1]['origin'][1])>11)):
+        for i, line in enumerate(lines):
+            if i > 0 and (line['page_num']!=lines[i-1]['page_num'] or  (int(line['origin'][1])-int(lines[i-1]['origin'][1])>11)):
                 if current_para:
                     paragraphs.append({
                         "elements": current_para,
@@ -314,7 +366,7 @@ class PDFTranslator:
                         "font_size": current_para[0]["size"]
                     })
                     current_para = []
-            current_para.append(span)
+            current_para.append(line)
 
         if current_para:
             paragraphs.append({
@@ -409,14 +461,22 @@ class PDFTranslator:
         # 1. Extract text with styling
         spans = self.extract_spans(input_folder_path)
 
-        # # 2. Group into paragraphs
-        paragraphs = self.group_into_paragraphs(spans)
+        # print(f"==============spans {spans}")
+
+        # Group spans by lines
+        lines = self.group_into_lines(spans)
+
+        # print(f"==============lines {lines}")
+
+        # 2. Group into paragraphs
+        paragraphs = self.group_into_paragraphs(lines)
 
         # paragraphs = self.add_style_flag(paragraphs)
         #
         print(f'===============paragraphs {paragraphs}')
         #
         #
+        '''
         docx_doc = Document()
         section = docx_doc.sections[0]
         section.page_height = Inches(11.69)  # A4 height
@@ -461,13 +521,15 @@ class PDFTranslator:
             else:
                 para_format.space_after = Pt(0)
 
-            '''
-            TODO:
-            1. ADD MARKERS FOR NEW LINE
-            2. CHECK OUTPUT FOR MULTIPLE PAGES
-            3. HANDLE HEADERS AND FOOTERS DIFFERENTLY
-            4. MANAGE FORMAT BETTER
-             '''
+
+           
+            # TODO:
+            # 1. ADD MARKERS FOR NEW LINE
+            # 2. CHECK OUTPUT FOR MULTIPLE PAGES
+            # 3. FOR MULTIPLE PAGES, CHECK LINE SPACING(AND DO WE NEED TO HANDLE LINE SPACING DIFFERENTLY FOR DIFFERENT PAGES)
+            # 4. HANDLE HEADERS AND FOOTERS DIFFERENTLY
+            # 5. MANAGE FORMAT BETTER
+            
 
             for line, _ in lines:
                 run = None
@@ -487,3 +549,4 @@ class PDFTranslator:
 
         output_docx_path = os.path.join(output_folder_path, "translated_output.docx")
         docx_doc.save(output_docx_path)
+        '''
