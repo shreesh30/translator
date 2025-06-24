@@ -1,4 +1,3 @@
-import re
 import os
 import re
 import sys
@@ -301,22 +300,6 @@ class PDFTranslator:
             "bbox": paragraph_bbox
         }
 
-    # def should_insert_space(self,prev_span, curr_span):
-    #     # basic cleanup
-    #     if not prev_span or not curr_span:
-    #         return False
-    #
-    #     # Always insert space if there's actual visual gap
-    #     x_gap = curr_span["bbox"].x0 - prev_span["bbox"].x1
-    #
-    #     # If fonts changed significantly (e.g. 3pt or more), mark as break
-    #     font_change = abs(curr_span["size"] - prev_span["size"]) > 2.5
-    #
-    #     # If same size but gap exists, still add space
-    #     if x_gap > 1.0 or font_change:
-    #         return True
-    #     return False
-
     def group_into_lines(self, spans):
         """Group text spans into lines based on shared Y position and page number.
         Adds space only when font size increases significantly within the same line.
@@ -548,7 +531,6 @@ class PDFTranslator:
             )
         # #
             print(f'==========================line {lines}')
-        #     print(f'==========================adjusted_bbox {adjusted_bbox}')
 
             para = docx_doc.add_paragraph()
             para_format = para.paragraph_format
@@ -570,11 +552,14 @@ class PDFTranslator:
 
            
             # TODO:
-            # 1. ADD MARKERS FOR NEW LINE
-            # 2. CHECK OUTPUT FOR MULTIPLE PAGES
-            # 3. FOR MULTIPLE PAGES, CHECK LINE SPACING(AND DO WE NEED TO HANDLE LINE SPACING DIFFERENTLY FOR DIFFERENT PAGES)
-            # 4. HANDLE HEADERS AND FOOTERS DIFFERENTLY
-            # 5. MANAGE FORMAT BETTER
+            # 1. REMOVE HEADERS AND FOOTERS(FIRST WORK ON MAINTAING THE FORMAT OF THE MAIN CONTENT AND THEN WORK ON THE HEADERS AND FOOTERS)
+            # 2. ADD MARKERS FOR NEW LINE
+            # 3. CHECK OUTPUT FOR MULTIPLE PAGES
+            # 4. ADD TABS FOR LINES WITHIN THE SAME PARAGRAPHS, AS SOME TEXTS IN THE SAME PARAGRAPHS ARE EITHER CENTERED OR LEFT ALIGNED OR RIGHT ALIGNED,
+            # OR HAVE SOME TABS, SO LOOK INTO HOW I CAN MAINTAIN THE FORMAT IN THE TRANSLATED DOCUMENT
+            # 5. FOR MULTIPLE PAGES, CHECK LINE SPACING(AND DO WE NEED TO HANDLE LINE SPACING DIFFERENTLY FOR DIFFERENT PAGES)
+            # 6. HANDLE HEADERS AND FOOTERS DIFFERENTLY
+            # 7. MANAGE FORMAT BETTER
             
 
             for line, _ in lines:
