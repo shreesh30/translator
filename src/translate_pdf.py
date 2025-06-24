@@ -194,6 +194,8 @@ class PDFTranslator:
 
     def translate_text(self, text: str, tgt_lang: str) -> str:
         print(f"[INFO] Translating single text to {tgt_lang}...")
+        print(f"[INFO] Translating the text:")
+        print(text)
         try:
             processed = self.processor.preprocess_batch([text], src_lang=self.source_language_key, tgt_lang=tgt_lang)
             print(f"[DEBUG] Preprocessed: {processed}")
@@ -299,12 +301,42 @@ class PDFTranslator:
             "bbox": paragraph_bbox
         }
 
+    # def should_insert_space(self,prev_span, curr_span):
+    #     # basic cleanup
+    #     if not prev_span or not curr_span:
+    #         return False
+    #
+    #     # Always insert space if there's actual visual gap
+    #     x_gap = curr_span["bbox"].x0 - prev_span["bbox"].x1
+    #
+    #     # If fonts changed significantly (e.g. 3pt or more), mark as break
+    #     font_change = abs(curr_span["size"] - prev_span["size"]) > 2.5
+    #
+    #     # If same size but gap exists, still add space
+    #     if x_gap > 1.0 or font_change:
+    #         return True
+    #     return False
+
     def group_into_lines(self, spans):
         """Group text spans into lines based on shared Y position and page number.
-        Does not store individual spans — only final line text and bbox.
+        Adds space only when font size increases significantly within the same line.
         """
         lines = []
         current_line = None
+        prev_span = None
+
+        def should_insert_space(prev_span, curr_span):
+            if not prev_span:
+                return False
+
+            x_gap = curr_span["bbox"].x0 - prev_span["bbox"].x1
+
+            # Font size must increase significantly to trigger space
+            font_increased = (curr_span["size"] - prev_span["size"]) > 2.0
+
+            same_line = int(prev_span["origin"][1]) == int(curr_span["origin"][1])
+
+            return (x_gap > 1.0) or (font_increased and same_line)
 
         for span in spans:
             if not span.get("text"):
@@ -313,7 +345,7 @@ class PDFTranslator:
             is_new_line = (
                     current_line is None or
                     span["page_num"] != current_line["page_num"] or
-                    int(span["bbox"].y0) != int(current_line["bbox"].y0)
+                    int(span["origin"][1]) != int(current_line["origin"][1])
             )
 
             if is_new_line:
@@ -325,24 +357,31 @@ class PDFTranslator:
                     "line_bbox": span["line_bbox"],
                     "bbox": fitz.Rect(span["bbox"]),
                     "origin": span["origin"],
-                    "size" : span["size"]
+                    "size": span["size"]
                 }
             else:
-                prev_bbox = current_line["bbox"]
-                curr_bbox = span["bbox"]
-
-                # Insert space based on x1-x0 alignment
-                if int(prev_bbox.x1) == int(curr_bbox.x0):
-                    current_line["text"] += span["text"]
-                else:
+                if should_insert_space(prev_span, span):
                     current_line["text"] += " " + span["text"]
+                else:
+                    current_line["text"] += span["text"]
 
-                # Expand bbox
+                # Expand bounding box
+                curr_bbox = span["bbox"]
                 x0 = min(current_line["bbox"].x0, curr_bbox.x0)
                 y0 = min(current_line["bbox"].y0, curr_bbox.y0)
                 x1 = max(current_line["bbox"].x1, curr_bbox.x1)
                 y1 = max(current_line["bbox"].y1, curr_bbox.y1)
                 current_line["bbox"] = fitz.Rect(x0, y0, x1, y1)
+
+                # Update origin
+                x = min(current_line["origin"][0], span["origin"][0])
+                y = max(current_line["origin"][1], span["origin"][1])
+                current_line["origin"] = (x, y)
+
+                # Track highest size so far for reference (optional)
+                current_line["size"] = max(current_line["size"], span["size"])
+
+            prev_span = span
 
         if current_line:
             lines.append(current_line)
@@ -463,8 +502,15 @@ class PDFTranslator:
 
         # print(f"==============spans {spans}")
 
+        sorted_spans = sorted(
+            spans,
+            key=lambda x: (x["page_num"], x["origin"][1])
+        )
+
+        # print(f'==================sorted spans {sorted_spans}')
+
         # Group spans by lines
-        lines = self.group_into_lines(spans)
+        lines = self.group_into_lines(sorted_spans)
 
         # print(f"==============lines {lines}")
 
@@ -476,7 +522,7 @@ class PDFTranslator:
         print(f'===============paragraphs {paragraphs}')
         #
         #
-        '''
+
         docx_doc = Document()
         section = docx_doc.sections[0]
         section.page_height = Inches(11.69)  # A4 height
@@ -497,7 +543,7 @@ class PDFTranslator:
                 text=" ".join(translated_para["paragraph"]),
                 bbox=translated_para["bbox"],
                 font_size=paragraph["font_size"],
-                font_path=self.language_config.get_font_path(),
+                font_path=self.language_config.get_target_font_path(),
                 font_name=self.font_name
             )
         # #
@@ -549,4 +595,4 @@ class PDFTranslator:
 
         output_docx_path = os.path.join(output_folder_path, "translated_output.docx")
         docx_doc.save(output_docx_path)
-        '''
+
