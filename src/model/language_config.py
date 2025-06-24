@@ -5,7 +5,7 @@ from dataclasses import dataclass
 class LanguageConfig:
     target_language: str
     target_language_key: str
-    font_path: str
+    target_font_path: str
     font_multiplier: float
     line_spacing_multiplier: float
     source_language: str = None
@@ -17,8 +17,8 @@ class LanguageConfig:
     def get_target_language_key(self):
         return self.target_language_key
 
-    def get_font_path(self):
-        return self.font_path
+    def get_target_font_path(self):
+        return self.target_font_path
 
     def get_font_multiplier(self):
         return self.font_multiplier
