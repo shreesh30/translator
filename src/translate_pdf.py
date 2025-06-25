@@ -69,7 +69,8 @@ class PDFTranslator:
 
         return font_name
 
-    def initialize_tokenizer(self, ckpt_dir):
+    @staticmethod
+    def initialize_tokenizer(ckpt_dir):
         tokenizer = AutoTokenizer.from_pretrained(ckpt_dir,trust_remote_code=True)
         return tokenizer
 
@@ -241,7 +242,8 @@ class PDFTranslator:
             print(f"[ERROR] Translation failed: {e}")
             return ""
 
-    def extract_spans(self, pdf_path):
+    @staticmethod
+    def extract_spans(pdf_path):
         doc = fitz.open(pdf_path)
         spans = []
 
@@ -273,7 +275,8 @@ class PDFTranslator:
 
         return spans
 
-    def get_paragraph_bbox(self , paragraph):
+    @staticmethod
+    def get_paragraph_bbox(paragraph):
         x0s, y0s, x1s, y1s = [], [], [], []
         for span in paragraph["elements"]:
             rect = span["bbox"]
@@ -300,7 +303,8 @@ class PDFTranslator:
             "bbox": paragraph_bbox
         }
 
-    def group_into_lines(self, spans):
+    @staticmethod
+    def group_into_lines(spans):
         """Group text spans into lines based on shared Y position and page number.
         Adds space only when font size increases significantly within the same line.
         """
@@ -308,16 +312,16 @@ class PDFTranslator:
         current_line = None
         prev_span = None
 
-        def should_insert_space(prev_span, curr_span):
-            if not prev_span:
+        def should_insert_space(previous_span, curr_span):
+            if not previous_span:
                 return False
 
-            x_gap = curr_span["bbox"].x0 - prev_span["bbox"].x1
+            x_gap = curr_span["bbox"].x0 - previous_span["bbox"].x1
 
             # Font size must increase significantly to trigger space
-            font_increased = (curr_span["size"] - prev_span["size"]) > 2.0
+            font_increased = (curr_span["size"] - previous_span["size"]) > 2.0
 
-            same_line = int(prev_span["origin"][1]) == int(curr_span["origin"][1])
+            same_line = int(previous_span["origin"][1]) == int(curr_span["origin"][1])
 
             return (x_gap > 1.0) or (font_increased and same_line)
 
@@ -372,7 +376,8 @@ class PDFTranslator:
         return lines
 
 
-    def group_into_paragraphs(self, lines):
+    @staticmethod
+    def group_into_paragraphs(lines):
         """Group text elements into paragraphs based on vertical proximity"""
         paragraphs = []
         current_para = []
@@ -401,7 +406,55 @@ class PDFTranslator:
 
         return paragraphs
 
-    def parse_styled_spans(self,text):
+    @staticmethod
+    def separate_headers_and_footers(paragraphs):
+        # TODO: FIGURE OUT HOW TO SEPARATE HEADER AND FOOTER
+        # THE MAIN CONTENT STARTS AFTER 131 SO ANYTHING BEFORE THAT IS A HEADER
+        # FIGURE OUT A WAY TO FIND WHETHER SOMETHING IS A FOOTER OR NOT
+        # anything less than 131 is a header, anything more than 671, is a footer
+        main_paragraphs, headers, footers=[],[],[]
+
+        page_number = None
+        for i,paragraph in enumerate(paragraphs):
+            print("============DIFFERENCE BETWEEN 2 PARAGRAPHS")
+            if i>0:
+                print("2 texts: ")
+                print(paragraph['elements'][-1])
+                print(paragraphs[i-1]['elements'][-1])
+                print('Difference:')
+                diff =paragraph['original_y']-paragraphs[i-1]['original_y']
+                print(diff)
+            # page_num = paragraph['page_num']
+            #
+            # if page_number is None:
+            #     main_paragraphs.append(paragraph)
+            # elif page_number is not None and page_number!=page_num:
+            #
+            #     page_number=page_num
+            #     pass
+            # original_y = paragraph.get('original_y')
+            #
+            # last_sentence = paragraph['elements'][-1]
+            # origin = last_sentence['origin']
+            #
+            # if i>0:
+            #     prev_sentence = paragraphs[i-1]['elements'][-1]
+            #     prev_origin = prev_sentence['origin']
+            #
+            #
+            #
+            #
+            # if 131 < original_y < 702:
+            #     main_paragraphs.append(paragraph)
+            # elif original_y<131:
+            #     headers.append(paragraph)
+            # elif original_y>702:
+            #     footers.append(paragraph)
+
+        return main_paragraphs, headers, footers
+
+    @staticmethod
+    def parse_styled_spans(text):
         """
         Parses the HTML-like text (<b>, <i>) and returns a list of spans.
         Each span is a dict with keys: text, bold, italic.
@@ -414,7 +467,7 @@ class PDFTranslator:
             nonlocal buffer
             if buffer:
                 style = {"bold": "b" in stack, "italic": "i" in stack}
-                spans.append({"text": buffer, **style})
+                spans.append({"text": buffer.strip(), **style})
                 buffer = ""
 
         tokens = re.split(r"(<\/?[bi]>)", text)
@@ -436,48 +489,85 @@ class PDFTranslator:
         flush_buffer()
         return spans
 
-    def layout_paragraph(self,text, bbox, font_size=12, font_name="Times-Roman", font_path=None):
+    # def layout_paragraph(self,text, bbox, font_size=12, font_name="Times-Roman", font_path=None):
+    #     font = fitz.Font(fontname=font_name, fontfile=font_path)
+    #     styled_spans = self.parse_styled_spans(text)
+    #
+    #     print(f'=============styled_spans {styled_spans}')
+    #
+    #     max_width = bbox.x1 - bbox.x0
+    #     line_height = font_size * 1.2
+    #     current_y = bbox.y0
+    #     lines = []
+    #     current_line = []
+    #
+    #     for span in styled_spans:
+    #         span_words = span["text"].split()
+    #         for word in span_words:
+    #             span_text = word
+    #             test_line = " ".join([s["text"] for s in current_line] + [span_text])
+    #             text_width = font.text_length(test_line, fontsize=font_size)
+    #
+    #             if text_width <= max_width:
+    #                 current_line.append({
+    #                     "text": span_text,
+    #                     "bold": span["bold"],
+    #                     "italic": span["italic"]
+    #                 })
+    #             else:
+    #                 if current_line:
+    #                     lines.append((current_line, current_y))
+    #                     current_y += line_height
+    #                 current_line = [{
+    #                     "text": span_text,
+    #                     "bold": span["bold"],
+    #                     "italic": span["italic"]
+    #                 }]
+    #
+    #     if current_line:
+    #         lines.append((current_line, current_y))
+    #
+    #     return lines
+
+    def layout_paragraph(self, text, bbox, font_size=12, font_name="Times-Roman", font_path=None):
         font = fitz.Font(fontname=font_name, fontfile=font_path)
         styled_spans = self.parse_styled_spans(text)
-
-        print(f'=============styled_spans {styled_spans}')
 
         max_width = bbox.x1 - bbox.x0
         line_height = font_size * 1.2
         current_y = bbox.y0
         lines = []
         current_line = []
+        current_line_text = ""
 
         for span in styled_spans:
             span_words = span["text"].split()
             for word in span_words:
-                span_text = word
-                test_line = " ".join([s["text"] for s in current_line] + [span_text])
-                text_width = font.text_length(test_line, fontsize=font_size)
+                test_line = (current_line_text + " " + word).strip() if current_line else word
+                test_width = font.text_length(test_line, fontsize=font_size)
 
-                if text_width <= max_width:
+                if test_width <= max_width:
                     current_line.append({
-                        "text": span_text,
+                        "text": word,
                         "bold": span["bold"],
                         "italic": span["italic"]
                     })
+                    current_line_text = test_line
                 else:
                     if current_line:
                         lines.append((current_line, current_y))
                         current_y += line_height
                     current_line = [{
-                        "text": span_text,
+                        "text": word,
                         "bold": span["bold"],
                         "italic": span["italic"]
                     }]
+                    current_line_text = word
 
         if current_line:
             lines.append((current_line, current_y))
 
-        total_height = len(lines) * line_height
-        adjusted_bbox = fitz.Rect(bbox.x0, bbox.y0, bbox.x1, bbox.y0 + total_height)
-
-        return lines, adjusted_bbox
+        return lines
 
     def process_pdf(self, input_folder_path: str,output_folder_path: str):
         # 1. Extract text with styling
@@ -490,64 +580,64 @@ class PDFTranslator:
             key=lambda x: (x["page_num"], x["origin"][1])
         )
 
-        # print(f'==================sorted spans {sorted_spans}')
-
         # Group spans by lines
         lines = self.group_into_lines(sorted_spans)
-
-        # print(f"==============lines {lines}")
 
         # 2. Group into paragraphs
         paragraphs = self.group_into_paragraphs(lines)
 
-        # paragraphs = self.add_style_flag(paragraphs)
-        #
-        print(f'===============paragraphs {paragraphs}')
-        #
-        #
+        # print(f"[INFO] Paragraphs: {paragraphs}")
+        main_paragraphs, headers, footers = self.separate_headers_and_footers(paragraphs)
 
-        docx_doc = Document()
-        section = docx_doc.sections[0]
-        section.page_height = Inches(11.69)  # A4 height
-        section.page_width = Inches(8.27)  # A4 width
+        # print(f'[INFO] Main Paragraphs: {main_paragraphs}')
+        # print(f'[INFO] Headers: {headers}')
+        # print(f'[INFO] Footers: {footers}')
 
-        # Adjust margins to maximize usable area
-        section.top_margin = Inches(1)
-        section.bottom_margin = Inches(0.5)
-        section.left_margin = Inches(1.5)
-        section.right_margin = Inches(1.5)
 
-        for i,paragraph in enumerate(paragraphs):
-            translated_para =self.translate_preserve_styles(paragraph, self.target_language_key)
 
-            print(f"===================translated_para {translated_para}")
+
+        # docx_doc = Document()
+        # section = docx_doc.sections[0]
+        # section.page_height = Inches(11.69)  # A4 height
+        # section.page_width = Inches(8.27)  # A4 width
         #
-            lines, adjusted_bbox = self.layout_paragraph(
-                text=" ".join(translated_para["paragraph"]),
-                bbox=translated_para["bbox"],
-                font_size=paragraph["font_size"],
-                font_path=self.language_config.get_target_font_path(),
-                font_name=self.font_name
-            )
+        # # Adjust margins to maximize usable area
+        # section.top_margin = Inches(1)
+        # section.bottom_margin = Inches(0.5)
+        # section.left_margin = Inches(1.5)
+        # section.right_margin = Inches(1.5)
+        #
+        # for i,paragraph in enumerate(paragraphs):
+        #     translated_para =self.translate_preserve_styles(paragraph, self.target_language_key)
+        #
+        #     print(f"===================translated_para {translated_para}")
         # #
-            print(f'==========================line {lines}')
-
-            para = docx_doc.add_paragraph()
-            para_format = para.paragraph_format
-
-            if len(lines) > 1:
-                para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-                para_format.first_line_indent = Pt(paragraph["font_size"] * self.language_config.get_font_multiplier() * 2)
-            else:
-                para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                para_format.first_line_indent = Pt(0)
-
-            para_format.line_spacing = Pt(paragraph["font_size"] * self.language_config.get_font_multiplier() * self.language_config.get_line_spacing_multiplier())  # or just Pt(14) for fixed size
-            para_format.space_before = Pt(0)
-            if i!=len(paragraphs)-1:
-                para_format.space_after = Pt(paragraph["font_size"]*0.5)
-            else:
-                para_format.space_after = Pt(0)
+        #     lines = self.layout_paragraph(
+        #         text=" ".join(translated_para["paragraph"]),
+        #         bbox=translated_para["bbox"],
+        #         font_size=paragraph["font_size"],
+        #         font_path=self.language_config.get_target_font_path(),
+        #         font_name=self.font_name
+        #     )
+        # # #
+        #     print(f'==========================line {lines}')
+        #
+        #     para = docx_doc.add_paragraph()
+        #     para_format = para.paragraph_format
+        #
+        #     if len(lines) > 1:
+        #         para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        #         para_format.first_line_indent = Pt(paragraph["font_size"] * self.language_config.get_font_multiplier() * 2)
+        #     else:
+        #         para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        #         para_format.first_line_indent = Pt(0)
+        #
+        #     para_format.line_spacing = Pt(paragraph["font_size"] * self.language_config.get_font_multiplier() * self.language_config.get_line_spacing_multiplier())  # or just Pt(14) for fixed size
+        #     para_format.space_before = Pt(0)
+        #     if i!=len(paragraphs)-1:
+        #         para_format.space_after = Pt(paragraph["font_size"]*0.5)
+        #     else:
+        #         para_format.space_after = Pt(0)
 
 
            
@@ -560,24 +650,37 @@ class PDFTranslator:
             # 5. FOR MULTIPLE PAGES, CHECK LINE SPACING(AND DO WE NEED TO HANDLE LINE SPACING DIFFERENTLY FOR DIFFERENT PAGES)
             # 6. HANDLE HEADERS AND FOOTERS DIFFERENTLY
             # 7. MANAGE FORMAT BETTER
+
+        '''Texts like below are appearing as separate paragraphs
+                1. The Hon’ble Sri C. Rajagopalachariar.
+                2. Dr. B. Pattabhi Sitaramayya.
+                3. The Hon’ble Sri T. Prakasam.
+                4. The Hon’ble Dewan Bahadur Sir N. Gopalaswami Ayyangar.
+                5. Diwan Bahadur Sir Alladi Krishnaswami Ayyar.
+                
+                First check output of current code, if it doesn't result into something fruitful then go for the below logic
+                According to out current logic, these texts will get centered, we dont want that to happen.
+                We change the logic to see if the left margin-start of line==right margin-end of line, if that is the
+                case then we need to centre the line else we will have to make it stic to the right
+            '''
             
 
-            for line, _ in lines:
-                run = None
-                for word_info in line:
-                    run = para.add_run(word_info["text"] + " ")
-                    run.font.size = Pt(paragraph["font_size"]*self.language_config.get_font_multiplier())
-                    run.font.name = self.font_name
-
-                    # Ensure custom font is applied (especially for non-default fonts)
-                    r = run._element
-                    r.rPr.rFonts.set(qn('w:eastAsia'), self.font_name)
-
-                    if word_info.get("bold"):
-                        run.bold = True
-                    if word_info.get("italic"):
-                        run.italic = True
-
-        output_docx_path = os.path.join(output_folder_path, "translated_output.docx")
-        docx_doc.save(output_docx_path)
+        #     for line, _ in lines:
+        #         run = None
+        #         for word_info in line:
+        #             run = para.add_run(word_info["text"] + " ")
+        #             run.font.size = Pt(paragraph["font_size"]*self.language_config.get_font_multiplier())
+        #             run.font.name = self.font_name
+        #
+        #             # Ensure custom font is applied (especially for non-default fonts)
+        #             r = run._element
+        #             r.rPr.rFonts.set(qn('w:eastAsia'), self.font_name)
+        #
+        #             if word_info.get("bold"):
+        #                 run.bold = True
+        #             if word_info.get("italic"):
+        #                 run.italic = True
+        #
+        # output_docx_path = os.path.join(output_folder_path, "translated_output.docx")
+        # docx_doc.save(output_docx_path)
 
