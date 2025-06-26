@@ -185,8 +185,10 @@ class PDFTranslator:
                     num_beams=8,
                     length_penalty=1.0,
                     early_stopping=True,
-                    repetition_penalty=1.2,
-                    # temperature=0.6
+                    repetition_penalty=1.3,
+                    do_sample=True,
+                    temperature = 0.4,
+                    no_repeat_ngram_size=3
                 )
 
                 print(f"[DEBUG] Generated Token IDs: {output}")
@@ -474,14 +476,15 @@ class PDFTranslator:
            
             # TODO:
             # 1. REMOVE HEADERS
-            # 2. SOME PARAGRAPHS SPLIT ON TO THE NEXT PAGE, AND THOS
-            # 2. ADD MARKERS FOR NEW LINE
-            # 3. CHECK OUTPUT FOR MULTIPLE PAGES
-            # 4. ADD TABS FOR LINES WITHIN THE SAME PARAGRAPHS, AS SOME TEXTS IN THE SAME PARAGRAPHS ARE EITHER CENTERED OR LEFT ALIGNED OR RIGHT ALIGNED,
+            # 2. SOME PARAGRAPHS SPLIT ON TO THE NEXT PAGE, AND THOSE PARAGRAPHS SHOULD NOT HAVE INDENTS
+            # 3. ATTACH FOOTERS TO PARAGRAPHS SO THAT THE FOOTER FOLLOWS THE PARAGRAPHS WHEREVER THE PARAGRAPH GOES
+            # 3. ADD MARKERS FOR NEW LINE
+            # 4. CHECK OUTPUT FOR MULTIPLE PAGES
+            # 5. ADD TABS FOR LINES WITHIN THE SAME PARAGRAPHS, AS SOME TEXTS IN THE SAME PARAGRAPHS ARE EITHER CENTERED OR LEFT ALIGNED OR RIGHT ALIGNED,
             # OR HAVE SOME TABS, SO LOOK INTO HOW I CAN MAINTAIN THE FORMAT IN THE TRANSLATED DOCUMENT
-            # 5. FOR MULTIPLE PAGES, CHECK LINE SPACING(AND DO WE NEED TO HANDLE LINE SPACING DIFFERENTLY FOR DIFFERENT PAGES)
-            # 6. HANDLE HEADERS AND FOOTERS DIFFERENTLY
-            # 7. MANAGE FORMAT BETTER
+            # 6. FOR MULTIPLE PAGES, CHECK LINE SPACING(AND DO WE NEED TO HANDLE LINE SPACING DIFFERENTLY FOR DIFFERENT PAGES)
+            # 7. HANDLE HEADERS AND FOOTERS DIFFERENTLY
+            # 8. MANAGE FORMAT BETTER
 
         '''Texts like below are appearing as separate paragraphs
                 1. The Hon’ble Sri C. Rajagopalachariar.
