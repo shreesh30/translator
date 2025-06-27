@@ -1,0 +1,47 @@
+from typing import Tuple
+
+import fitz
+
+from dataclasses import dataclass, field
+
+@dataclass
+class Line:
+    page_number: int = field(default_factory=int, repr=False)
+    text: str = field(default_factory=list)
+    line_bbox: fitz.Rect = field(default_factory=fitz.Rect)
+    bbox:fitz.Rect  = field(default_factory=fitz.Rect, repr=False)
+    origin: Tuple[float, float]  = field(default_factory=tuple)
+    font_size: float = field(default_factory=int, repr=False)
+
+    def set_text(self, text):
+        self.text = text
+
+    def set_line_bbox(self, bbox):
+        self.line_bbox = bbox
+
+    def set_bbox(self, bbox):
+        self.bbox = bbox
+
+    def set_origin(self, origin):
+        self.origin =  origin
+
+    def set_font_size(self, font_size):
+        self.font_size = font_size
+
+    def get_text(self):
+        return self. text
+
+    def get_line_bbox(self):
+        return self.line_bbox
+
+    def get_bbox(self):
+        return self.bbox
+
+    def get_origin(self):
+        return self.origin
+
+    def get_page_number(self):
+        return self.page_number
+
+    def get_font_size(self):
+        return self.font_size

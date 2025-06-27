@@ -104,66 +104,61 @@ class PDFTranslator:
 
         return model
 
-
-    @staticmethod
-    def is_word_only(text):
-        return bool(re.search(r'[a-zA-Z]', text))
-
-    def batch_translate(self, elements, tgt_lang):
-        contents = [e['content'] for e in elements]
-        translations = []
-        total = len(contents)
-        print(f"[INFO] Translating {total} elements...")
-
-        for i in range(0, total, self.BATCH_SIZE):
-            batch = contents[i:i + self.BATCH_SIZE]
-            print(f"\n[INFO] Processing batch {i // self.BATCH_SIZE + 1} ({i} to {min(i + self.BATCH_SIZE, total)})")
-            try:
-                processed = self.processor.preprocess_batch(batch, src_lang=self.source_language_key, tgt_lang=tgt_lang)
-                print(f"[DEBUG] Preprocessed: {processed}")
-
-                inputs = self.tokenizer(processed, truncation=True, padding="longest", return_tensors="pt").to(
-                    self.DEVICE)
-                print(f"[DEBUG] Tokenized Inputs: {inputs}")
-
-                with torch.no_grad():
-                    output = self.model.generate(
-                        **inputs,
-                        min_length=0,
-                        max_length=512,
-                        # 2316 with num_beams=6
-                        # num_beams=7,
-                        num_beams=6,
-                        # temperature=0.9,
-                        temperature=0.8,
-                        length_penalty=1.0,
-                        early_stopping=True,
-                        # no_repeat_ngram_size=3,
-                        repetition_penalty=1.2
-                    )
-
-                    print(f"[DEBUG] Generated Token IDs: {output}")
-
-                # with self.tokenizer.as_target_tokenizer():
-                decoded = self.tokenizer.batch_decode(
-                        output.detach().cpu().tolist(),
-                        skip_special_tokens=False,
-                        clean_up_tokenization_spaces=False
-                    )
-                print(f"[DEBUG] Decoded Text: {decoded}")
-
-                final = self.processor.postprocess_batch(decoded, lang=tgt_lang)
-                print(f"[DEBUG] Postprocessed Translations: {final}")
-                translations.extend(final)
-
-                del inputs
-                torch.cuda.empty_cache()
-            except Exception as e:
-                print(f"[ERROR] Batch failed: {e}")
-                translations.extend([""] * len(batch))
-
-        for elem, trans in zip(elements, translations):
-            elem['content'] = trans
+    # def batch_translate(self, elements, tgt_lang):
+    #     contents = [e['content'] for e in elements]
+    #     translations = []
+    #     total = len(contents)
+    #     print(f"[INFO] Translating {total} elements...")
+    #
+    #     for i in range(0, total, self.BATCH_SIZE):
+    #         batch = contents[i:i + self.BATCH_SIZE]
+    #         print(f"\n[INFO] Processing batch {i // self.BATCH_SIZE + 1} ({i} to {min(i + self.BATCH_SIZE, total)})")
+    #         try:
+    #             processed = self.processor.preprocess_batch(batch, src_lang=self.source_language_key, tgt_lang=tgt_lang)
+    #             print(f"[DEBUG] Preprocessed: {processed}")
+    #
+    #             inputs = self.tokenizer(processed, truncation=True, padding="longest", return_tensors="pt").to(
+    #                 self.DEVICE)
+    #             print(f"[DEBUG] Tokenized Inputs: {inputs}")
+    #
+    #             with torch.no_grad():
+    #                 output = self.model.generate(
+    #                     **inputs,
+    #                     min_length=0,
+    #                     max_length=512,
+    #                     # 2316 with num_beams=6
+    #                     # num_beams=7,
+    #                     num_beams=6,
+    #                     # temperature=0.9,
+    #                     temperature=0.8,
+    #                     length_penalty=1.0,
+    #                     early_stopping=True,
+    #                     # no_repeat_ngram_size=3,
+    #                     repetition_penalty=1.2
+    #                 )
+    #
+    #                 print(f"[DEBUG] Generated Token IDs: {output}")
+    #
+    #             # with self.tokenizer.as_target_tokenizer():
+    #             decoded = self.tokenizer.batch_decode(
+    #                     output.detach().cpu().tolist(),
+    #                     skip_special_tokens=False,
+    #                     clean_up_tokenization_spaces=False
+    #                 )
+    #             print(f"[DEBUG] Decoded Text: {decoded}")
+    #
+    #             final = self.processor.postprocess_batch(decoded, lang=tgt_lang)
+    #             print(f"[DEBUG] Postprocessed Translations: {final}")
+    #             translations.extend(final)
+    #
+    #             del inputs
+    #             torch.cuda.empty_cache()
+    #         except Exception as e:
+    #             print(f"[ERROR] Batch failed: {e}")
+    #             translations.extend([""] * len(batch))
+    #
+    #     for elem, trans in zip(elements, translations):
+    #         elem['content'] = trans
 
     def translate_text(self, text: str, tgt_lang: str) -> str:
         print(f"[INFO] Translating single text to {tgt_lang}...")
@@ -244,7 +239,8 @@ class PDFTranslator:
 
         return min_x, max_x, min_y, max_y
 
-    def _parse_span(self, span: dict, page_num: int) -> Dict:
+    @staticmethod
+    def _parse_span(span: dict, page_num: int) -> Dict:
         """
         Parses a span and returns cleaned span information.
         """
@@ -275,7 +271,7 @@ class PDFTranslator:
         for page in doc:
             blocks = page.get_text("dict", sort=True)["blocks"]
             page_num = page.number + 1
-            pg = Page(page_num)
+            pg = Page(number=page_num)
             pg.add_drawings(page.get_cdrawings())
             min_x, max_x, min_y, max_y = self.get_content_dimensions(blocks)
             pg.set_content_dimensions(min_x, max_x, min_y, max_y)
@@ -453,31 +449,32 @@ class PDFTranslator:
             page.process_page()
             print(f'[INFO] Page: {page}')
 
-            paragraphs = page.get_paragraphs()
-
-            for i,paragraph in enumerate(paragraphs):
-                translated_para =self.translate_preserve_styles(paragraph, self.target_language_key)
-
-                lines = self.layout_paragraph(
-                    text=" ".join(translated_para["paragraph"]),
-                    bbox=translated_para["bbox"],
-                    font_size=paragraph["font_size"],
-                    font_path=self.language_config.get_target_font_path(),
-                    font_name=self.font_name
-                )
-
-                self._write_paragraph_to_docx(docx_doc, lines, paragraph, i, len(paragraphs))
-
-
-            output_docx_path = os.path.join(output_folder_path, "translated_output.docx")
-            docx_doc.save(output_docx_path)
+            # paragraphs = page.get_paragraphs()
+            #
+            # for i,paragraph in enumerate(paragraphs):
+            #     translated_para =self.translate_preserve_styles(paragraph, self.target_language_key)
+            #
+            #     lines = self.layout_paragraph(
+            #         text=" ".join(translated_para["paragraph"]),
+            #         bbox=translated_para["bbox"],
+            #         font_size=paragraph["font_size"],
+            #         font_path=self.language_config.get_target_font_path(),
+            #         font_name=self.font_name
+            #     )
+            #
+            #     self._write_paragraph_to_docx(docx_doc, lines, paragraph, i, len(paragraphs))
+            #
+            #
+            # output_docx_path = os.path.join(output_folder_path, "translated_output.docx")
+            # docx_doc.save(output_docx_path)
 
 
            
             # TODO:
-            # 1. REMOVE HEADERS
-            # 2. SOME PARAGRAPHS SPLIT ON TO THE NEXT PAGE, AND THOSE PARAGRAPHS SHOULD NOT HAVE INDENTS
-            # 3. ATTACH FOOTERS TO PARAGRAPHS SO THAT THE FOOTER FOLLOWS THE PARAGRAPHS WHEREVER THE PARAGRAPH GOES
+            # 1. INDENT PARAGRAPHS BASED ON THEIR SPACING FROM THE LEFT, IF THEY HAVE SPACING SIMILAR TO THE START OF A PARAGRAPH, INDENT FROM LEFT OTHERWISE
+            #  IF SPACE BETWEEN START OF THE SENTENCE AND LEFT MARGIN AND END OF SENTENCE AND LEFT MARGIN IS SAME THEN MAKE THEM COME TO CENTER
+            # 1. SOME PARAGRAPHS SPLIT ON TO THE NEXT PAGE, AND THOSE PARAGRAPHS SHOULD NOT HAVE INDENTS
+            # 2. ATTACH FOOTERS TO PARAGRAPHS SO THAT THE FOOTER FOLLOWS THE PARAGRAPHS WHEREVER THE PARAGRAPH GOES
             # 3. ADD MARKERS FOR NEW LINE
             # 4. CHECK OUTPUT FOR MULTIPLE PAGES
             # 5. ADD TABS FOR LINES WITHIN THE SAME PARAGRAPHS, AS SOME TEXTS IN THE SAME PARAGRAPHS ARE EITHER CENTERED OR LEFT ALIGNED OR RIGHT ALIGNED,
