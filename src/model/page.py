@@ -313,29 +313,43 @@ class Page:
         self.spans = normalized
 
     def fix_punctuation_spacing(self):
-
         for line in self.lines:
             text = line.get_text()
 
             # Match abbreviations like B.N., c.i.e., H. V. R. (with optional space between)
             abbreviation_pattern = r'\b(?:[A-Za-z]\. ?){2,}'
-
-            # Step 1: Save abbreviations as placeholders
             matches = re.findall(abbreviation_pattern, text)
+
             placeholder_map = {}
 
             for i, abbr in enumerate(matches):
-                placeholder = f"<<ABBR_{i}>>"
-                placeholder_map[placeholder] = abbr
-                text = text.replace(abbr, placeholder)
+                # Count how many actual dots (.) are in the abbreviation
+                dot_count = abbr.count(".")
 
-            # Step 2: Fix general punctuation spacing
+                # If it has more than 3 dots, insert a space after each dot
+                if dot_count > 3:
+                    # Remove existing spaces and re-insert one after every dot
+                    cleaned = re.sub(r'\. ?', '.', abbr)  # Remove optional spaces
+                    spaced = re.sub(r'\.', '. ', cleaned).strip()
+                    abbr = spaced
+
+                placeholder = f"<<ABBR_{i}>>"
+                placeholder_map[placeholder] = abbr.upper()
+                text = text.replace(matches[i], placeholder)
+
+            # Fix general punctuation spacing
             text = re.sub(r'\s+([.,:;])', r'\1', text)  # "dec ." → "dec."
             text = re.sub(r'([.,:;])(?=\S)', r'\1 ', text)  # "dec.1946" → "dec. 1946"
 
-            # Step 3: Restore abbreviations
+            # Restore abbreviations safely
             for placeholder, abbr in placeholder_map.items():
+                # Ensure a space exists after abbreviation if it's stuck to a word
+                text = re.sub(rf'{re.escape(placeholder)}(?=\w)', abbr + ' ', text)
+                # General replacement if not already handled
                 text = text.replace(placeholder, abbr)
+
+            # Final cleanup: remove extra spaces
+            text = re.sub(r'\s{2,}', ' ', text)
 
             line.set_text(text)
 

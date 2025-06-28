@@ -17,6 +17,7 @@ from reportlab.pdfbase.ttfonts import TTFont as ReportlabTTFont
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, BitsAndBytesConfig
 
 from src.model.page import Page
+from src.model.line import Line
 from src.model.language_config import LanguageConfig
 
 BOLD = "[000]"
@@ -182,7 +183,7 @@ class PDFTranslator:
                     early_stopping=True,
                     repetition_penalty=1.3,
                     do_sample=True,
-                    temperature = 0.4,
+                    temperature = 0.6,
                     no_repeat_ngram_size=3
                 )
 
@@ -289,31 +290,29 @@ class PDFTranslator:
 
         return pages
 
-    @staticmethod
-    def get_paragraph_bbox(paragraph):
-        x0s, y0s, x1s, y1s = [], [], [], []
-        for span in paragraph["elements"]:
-            rect = span["bbox"]
-            x0s.append(rect.x0)
-            y0s.append(rect.y0)
-            x1s.append(rect.x1)
-            y1s.append(rect.y1)
-        return Rect(min(x0s), min(y0s), max(x1s), max(y1s))
-
     def translate_preserve_styles(self,paragraph, tgt_lang):
-        paragraph_bbox = self.get_paragraph_bbox(paragraph)
+        paragraph_bbox = paragraph.get_para_bbox()
 
         # 1. Apply invisible style markers
-        text = " ".join(span['text'] for span in paragraph["elements"])
+        text = " ".join(line.get_text() for line in paragraph.get_lines())
 
         # Translate with context
         translated = self.translate_text(text, tgt_lang)
 
-        return {
-            "paragraph": translated,
-            "page_num": paragraph["page_num"],
-            "bbox": paragraph_bbox
-        }
+        text = " ".join(translated)
+
+        print(f'[INFO] Translated Text: {text}')
+
+        new_line = Line(
+            page_number=paragraph.get_page_number(),
+            text=text,
+            bbox=paragraph_bbox,
+            font_size=paragraph.get_font_size()
+        )
+
+        paragraph.set_lines([new_line])
+
+        return paragraph
 
     @staticmethod
     def parse_styled_spans(text):
@@ -351,77 +350,53 @@ class PDFTranslator:
         flush_buffer()
         return spans
 
-    def layout_paragraph(self, text, bbox, font_size=12, font_name="Times-Roman", font_path=None):
-        font = fitz.Font(fontname=font_name, fontfile=font_path)
-        styled_spans = self.parse_styled_spans(text)
+    def layout_paragraph(self, lines):
+        """
+        Prepare styled word runs for insertion into DOCX.
+        No need to calculate line breaks — Word handles wrapping.
+        """
 
-        max_width = bbox.x1 - bbox.x0
-        line_height = font_size * 1.2
-        current_y = bbox.y0
-        lines = []
-        current_line = []
-        current_line_text = ""
+        text = " ".join(line.get_text() for line in lines)
+
+        styled_spans = self.parse_styled_spans(text)
+        runs = []
 
         for span in styled_spans:
-            span_words = span["text"].split()
-            for word in span_words:
-                test_line = (current_line_text + " " + word).strip() if current_line else word
-                test_width = font.text_length(test_line, fontsize=font_size)
+            for word in span["text"].split():
+                runs.append({
+                    "text": word,
+                    "bold": span.get("bold", False),
+                    "italic": span.get("italic", False)
+                })
 
-                if test_width <= max_width:
-                    current_line.append({                        "text": word,
-                        "bold": span["bold"],
-                        "italic": span["italic"]
-                    })
-                    current_line_text = test_line
-                else:
-                    if current_line:
-                        lines.append((current_line, current_y))
-                        current_y += line_height
-                    current_line = [{
-                        "text": word,
-                        "bold": span["bold"],
-                        "italic": span["italic"]
-                    }]
-                    current_line_text = word
+        return runs
 
-        if current_line:
-            lines.append((current_line, current_y))
-
-        return lines
-
-    def _write_paragraph_to_docx(self, docx_doc, lines, paragraph, index, total):
+    def _write_paragraph_to_docx(self, docx_doc, page, runs, paragraph, index, total):
         para = docx_doc.add_paragraph()
         para_format = para.paragraph_format
 
-        if len(lines) > 1:
-            para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-            para_format.first_line_indent = Pt(paragraph["font_size"] * self.language_config.get_font_multiplier() * 2)
-        else:
-            para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            para_format.first_line_indent = Pt(0)
-
+        para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        # TODO: INDENT BASED ON THE DIFFERENCE BETWEEN THE START OF THE TEXT AND LEFT MARGIN AND END OF THE TEXT AND THE RIGHT MARGIN
+        para_format.first_line_indent = Pt(paragraph.get_font_size() * self.language_config.get_font_multiplier() * 2)
         para_format.line_spacing = Pt(
-            paragraph["font_size"] *
+            paragraph.get_font_size() *
             self.language_config.get_font_multiplier() *
             self.language_config.get_line_spacing_multiplier()
         )
-        # TRIAL CONFIG FOR RUBRIK
         para_format.space_before = Pt(0)
-        para_format.space_after = Pt(paragraph["font_size"] * 0.5 if index != total - 1 else 0)
+        para_format.space_after = Pt(paragraph.get_font_size() * 0.5 if index != total - 1 else 0)
 
-        for line, _ in lines:
-            for word_info in line:
-                run = para.add_run(word_info["text"] + " ")
-                run.font.size = Pt(paragraph["font_size"] * self.language_config.get_font_multiplier())
-                run.font.name = self.font_name
-                r = run._element
-                r.rPr.rFonts.set(qn('w:eastAsia'), self.font_name)
+        for run_info in runs:
+            run = para.add_run(run_info["text"] + " ")
+            run.font.size = Pt(paragraph.get_font_size() * self.language_config.get_font_multiplier())
+            run.font.name = self.font_name
+            r = run._element
+            r.rPr.rFonts.set(qn('w:eastAsia'), self.font_name)
 
-                if word_info.get("bold"):
-                    run.bold = True
-                if word_info.get("italic"):
-                    run.italic = True
+            if run_info.get("bold"):
+                run.bold = True
+            if run_info.get("italic"):
+                run.italic = True
 
     @staticmethod
     def _configure_docx_section(docx_doc):
@@ -449,24 +424,18 @@ class PDFTranslator:
             page.process_page()
             print(f'[INFO] Page: {page}')
 
-            # paragraphs = page.get_paragraphs()
-            #
-            # for i,paragraph in enumerate(paragraphs):
-            #     translated_para =self.translate_preserve_styles(paragraph, self.target_language_key)
-            #
-            #     lines = self.layout_paragraph(
-            #         text=" ".join(translated_para["paragraph"]),
-            #         bbox=translated_para["bbox"],
-            #         font_size=paragraph["font_size"],
-            #         font_path=self.language_config.get_target_font_path(),
-            #         font_name=self.font_name
-            #     )
-            #
-            #     self._write_paragraph_to_docx(docx_doc, lines, paragraph, i, len(paragraphs))
-            #
-            #
-            # output_docx_path = os.path.join(output_folder_path, "translated_output.docx")
-            # docx_doc.save(output_docx_path)
+            paragraphs = page.get_paragraphs()
+
+            for i,paragraph in enumerate(paragraphs):
+                translated_para =self.translate_preserve_styles(paragraph, self.target_language_key)
+
+                runs = self.layout_paragraph(lines=translated_para.get_lines())
+
+                self._write_paragraph_to_docx(docx_doc,page , runs, paragraph, i, len(paragraphs))
+
+
+            output_docx_path = os.path.join(output_folder_path, "translated_output.docx")
+            docx_doc.save(output_docx_path)
 
 
            

@@ -1,7 +1,7 @@
-import fitz
-
 from dataclasses import dataclass, field
-from typing import List, Dict
+from typing import List
+
+import fitz
 
 from src.model.footer import Footer
 from src.model.line import Line

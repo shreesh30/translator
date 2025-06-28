@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 @dataclass
 class Line:
     page_number: int = field(default_factory=int, repr=False)
-    text: str = field(default_factory=list)
+    text: str = ""
     line_bbox: fitz.Rect = field(default_factory=fitz.Rect)
     bbox:fitz.Rect  = field(default_factory=fitz.Rect, repr=False)
     origin: Tuple[float, float]  = field(default_factory=tuple)
