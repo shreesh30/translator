@@ -1,5 +1,6 @@
 import fitz
 import re
+import string
 
 from src.model.header import Header
 from src.model.footer import Footer
@@ -98,12 +99,6 @@ class Page:
     def get_content_width(self):
         return self.content_width
 
-    def sort_spans(self):
-        self.spans = sorted(
-            self.spans,
-            key=lambda x: (x["origin"][1])
-        )
-
     def compute_content_dimensions(self):
         self.content_width = self.max_x - self.min_x
         self.content_height = self.max_y - self.min_y
@@ -115,14 +110,6 @@ class Page:
         """
         lines = []
         current_line = None
-        prev_span = None
-
-        def should_insert_space(previous_span, curr_span):
-            if not previous_span:
-                return False
-
-            x_gap = curr_span["bbox"].x0 - previous_span["bbox"].x1
-            return x_gap > 1.0
 
         for span in self.spans:
             if not span.get("text"):
@@ -130,7 +117,7 @@ class Page:
 
             is_new_line = (
                     current_line is None or
-                    int(span["bbox"].y1) != int(current_line.get_bbox().y1)
+                    span["bbox"].y1 - current_line.get_bbox().y1 > 1
             )
 
             if is_new_line:
@@ -144,10 +131,7 @@ class Page:
                 current_line.set_font_size(span["size"])
             else:
                 # Update text
-                if should_insert_space(prev_span, span):
-                    current_line.set_text(current_line.get_text() + " " + span["text"])
-                else:
-                    current_line.set_text(current_line.get_text() + span["text"])
+                current_line.set_text(current_line.get_text() + " " + span["text"])
 
                 # Update bbox
                 curr_bbox = span["bbox"]
@@ -167,7 +151,6 @@ class Page:
                 # Update font size
                 current_line.set_font_size(max(current_line.font_size, span["size"]))
 
-            prev_span = span
 
         if current_line:
             lines.append(current_line)
@@ -185,7 +168,7 @@ class Page:
             is_new_para = (
                     i > 0 and (
                     line.get_page_number() != self.lines[i - 1].get_page_number() or
-                    (int(line.get_line_bbox().y0) - int(self.lines[i-1].get_line_bbox().y1)>2)
+                    (int(line.get_line_bbox().y0) - int(self.lines[i-1].get_line_bbox().y1)>=2)
             )
             )
 
@@ -285,43 +268,82 @@ class Page:
         self.process_footer(footers)
 
     def normalize_spans(self):
+        normalized = []
         prev_span = None
-        current_line_font_size = None
+        punctuation_set = set(string.punctuation + '’‘“”—–')  # common typographic symbols
 
         for span in self.spans:
             if not span.get("text"):
                 continue
 
-            # Check if we're starting a new line
+            text = span["text"].strip()
+            is_punctuation = all(char in punctuation_set for char in text)
+
             is_new_line = (
-                    prev_span is None or
-                    int(span["bbox"].y1) != int(prev_span["bbox"].y1)
+                    not prev_span or
+                    abs(span["bbox"].y1 - prev_span["bbox"].y1) > 1.0
             )
 
             if is_new_line:
-                current_line_font_size = span["size"]  # Set new line's base font size
+                if prev_span:
+                    normalized.append(prev_span)
+                prev_span = span
+                continue
+
+            if is_punctuation:
+                prev_span['text'] += span['text']
+                prev_span['bbox'].x1 = span['bbox'].x1
+                continue
+
+            x_gap = span['bbox'].x0 - prev_span['bbox'].x1
+
+            if span["size"] < prev_span["size"]:
+                if x_gap <= 1.0:
+                    prev_span['text'] += span['text']
+                else:
+                    prev_span['text'] += ' ' + span['text']
+                prev_span['bbox'].x1 = span['bbox'].x1
             else:
-                if span["size"] != current_line_font_size:
-                    old_size = span["size"]
-                    scaling_factor = current_line_font_size / old_size
+                normalized.append(prev_span)
+                prev_span = span
 
-                    # Update font size
-                    span["size"] = current_line_font_size
+        if prev_span:
+            normalized.append(prev_span)
 
-                    # Scale bbox height
-                    bbox = span["bbox"]
-                    height = bbox.y1 - bbox.y0
-                    new_height = height * scaling_factor
-                    baseline = bbox.y1  # assume bottom aligned
-                    new_y0 = baseline - new_height
-                    span["bbox"] = fitz.Rect(bbox.x0, new_y0, bbox.x1, baseline)
+        self.spans = normalized
 
-            prev_span = span
+    def fix_punctuation_spacing(self):
+
+        for line in self.lines:
+            text = line.get_text()
+
+            # Match abbreviations like B.N., c.i.e., H. V. R. (with optional space between)
+            abbreviation_pattern = r'\b(?:[A-Za-z]\. ?){2,}'
+
+            # Step 1: Save abbreviations as placeholders
+            matches = re.findall(abbreviation_pattern, text)
+            placeholder_map = {}
+
+            for i, abbr in enumerate(matches):
+                placeholder = f"<<ABBR_{i}>>"
+                placeholder_map[placeholder] = abbr
+                text = text.replace(abbr, placeholder)
+
+            # Step 2: Fix general punctuation spacing
+            text = re.sub(r'\s+([.,:;])', r'\1', text)  # "dec ." → "dec."
+            text = re.sub(r'([.,:;])(?=\S)', r'\1 ', text)  # "dec.1946" → "dec. 1946"
+
+            # Step 3: Restore abbreviations
+            for placeholder, abbr in placeholder_map.items():
+                text = text.replace(placeholder, abbr)
+
+            line.set_text(text)
+
 
     def process_page(self):
-        self.sort_spans()
         self.normalize_spans()
         self.group_by_lines()
+        self.fix_punctuation_spacing()
         self.process_lines()
         self.group_by_paragraphs()
         self.compute_content_dimensions()
