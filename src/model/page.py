@@ -150,8 +150,6 @@ class Page:
                     max(current_line.get_bbox().y1, curr_bbox.y1),
                 )
                 current_line.set_bbox(updated_bbox)
-
-                # TODO: CHECK IF REMOVING LINE BBOX IS FINE OR NOT
                 current_line.set_line_bbox(updated_bbox)
 
                 # Update origin
