@@ -19,10 +19,10 @@ from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, BitsAndBytesConfi
 from src.model.page import Page
 from src.model.line import Line
 from src.model.language_config import LanguageConfig
+from src.utils.utils import Utils
 
-BOLD = "[000]"
-ITALIC = "[111]"
-NEW_LINE="[222]"
+
+# TAGS I CAN USE [B.O.L.D]-> INDICTRANS DOESNT TRANSLATE THIS
 
 
 class PDFTranslator:
@@ -31,7 +31,6 @@ class PDFTranslator:
     TMP_DOCX = "resource/tmp/docx/temp.intermediate.docx"
     OUTPUT_DOCX = "resource/output/translated.docx"
     CKPT_DIR = 'ai4bharat/indictrans2-en-indic-1B'
-    BOLD_TAG='[111]'
 
     def __init__(self,lang_config:LanguageConfig, quantization=None):
         sys.stdout.reconfigure(encoding='utf-8')
@@ -42,8 +41,6 @@ class PDFTranslator:
         self.processor = IndicProcessor(inference=True)
         # self.config = AutoConfig.from_pretrained(self.CKPT_DIR)
         self.model = self.initialize_model(self.CKPT_DIR)
-
-        self.tag_map = {'[3001]': '<b>','[3002]': '</b>','[3003]': '<i>','[3004]': '</i>', '[3005]':'</n>'}
 
         self.language_config = lang_config
         self.target_language_key = self.language_config.get_target_language_key()
@@ -105,61 +102,6 @@ class PDFTranslator:
 
         return model
 
-    # def batch_translate(self, elements, tgt_lang):
-    #     contents = [e['content'] for e in elements]
-    #     translations = []
-    #     total = len(contents)
-    #     print(f"[INFO] Translating {total} elements...")
-    #
-    #     for i in range(0, total, self.BATCH_SIZE):
-    #         batch = contents[i:i + self.BATCH_SIZE]
-    #         print(f"\n[INFO] Processing batch {i // self.BATCH_SIZE + 1} ({i} to {min(i + self.BATCH_SIZE, total)})")
-    #         try:
-    #             processed = self.processor.preprocess_batch(batch, src_lang=self.source_language_key, tgt_lang=tgt_lang)
-    #             print(f"[DEBUG] Preprocessed: {processed}")
-    #
-    #             inputs = self.tokenizer(processed, truncation=True, padding="longest", return_tensors="pt").to(
-    #                 self.DEVICE)
-    #             print(f"[DEBUG] Tokenized Inputs: {inputs}")
-    #
-    #             with torch.no_grad():
-    #                 output = self.model.generate(
-    #                     **inputs,
-    #                     min_length=0,
-    #                     max_length=512,
-    #                     # 2316 with num_beams=6
-    #                     # num_beams=7,
-    #                     num_beams=6,
-    #                     # temperature=0.9,
-    #                     temperature=0.8,
-    #                     length_penalty=1.0,
-    #                     early_stopping=True,
-    #                     # no_repeat_ngram_size=3,
-    #                     repetition_penalty=1.2
-    #                 )
-    #
-    #                 print(f"[DEBUG] Generated Token IDs: {output}")
-    #
-    #             # with self.tokenizer.as_target_tokenizer():
-    #             decoded = self.tokenizer.batch_decode(
-    #                     output.detach().cpu().tolist(),
-    #                     skip_special_tokens=False,
-    #                     clean_up_tokenization_spaces=False
-    #                 )
-    #             print(f"[DEBUG] Decoded Text: {decoded}")
-    #
-    #             final = self.processor.postprocess_batch(decoded, lang=tgt_lang)
-    #             print(f"[DEBUG] Postprocessed Translations: {final}")
-    #             translations.extend(final)
-    #
-    #             del inputs
-    #             torch.cuda.empty_cache()
-    #         except Exception as e:
-    #             print(f"[ERROR] Batch failed: {e}")
-    #             translations.extend([""] * len(batch))
-    #
-    #     for elem, trans in zip(elements, translations):
-    #         elem['content'] = trans
 
     def translate_text(self, text: str, tgt_lang: str) -> str:
         print(f"[INFO] Translating single text to {tgt_lang}...")
@@ -204,7 +146,7 @@ class PDFTranslator:
 
 
             # Apply replacements
-            for old, new in self.tag_map.items():
+            for old, new in Utils.tag_map.items():
                 final[0] = final[0].replace(old, new)
 
             return final
@@ -247,13 +189,11 @@ class PDFTranslator:
         """
         text = span["text"].strip()
         if not text:
-            return None
+            return {}
 
         font = span["font"]
         if "bold" in font.lower():
-            text = f"[3001]{text}[3002]"
-        elif "italic" in font.lower():
-            text = f"[3003]{text}[3004]"
+            text = f"[3000]{text}[4000]"
 
         return {
             "text": text.lower(),
@@ -262,7 +202,6 @@ class PDFTranslator:
             "page_num": page_num,
             "origin": span["origin"],
             "bbox": fitz.Rect(span["bbox"]),
-            "line_bbox": fitz.Rect(span["bbox"]),
         }
 
     def extract_pages(self, pdf_path: str) -> List[Page]:
@@ -327,19 +266,20 @@ class PDFTranslator:
         def flush_buffer():
             nonlocal buffer
             if buffer:
-                style = {"bold": "b" in stack, "italic": "i" in stack}
+                # style = {"bold": "b" in stack, "italic": "i" in stack}
+                style = {"bold": "b" in stack}
                 spans.append({"text": buffer.strip(), **style})
                 buffer = ""
 
-        tokens = re.split(r"(<\/?[bi]>)", text)
+        tokens = re.split(r"(<\/?b>)", text)
 
         for token in tokens:
             if token == "":
                 continue
-            if token in ("<b>", "<i>"):
+            if token in "<b>":
                 flush_buffer()
-                stack.append(token[1])  # add 'b' or 'i'
-            elif token in ("</b>", "</i>"):
+                stack.append(token[1])  # add 'b'
+            elif token in "</b>":
                 flush_buffer()
                 tag = token[2]
                 if tag in stack:
@@ -366,25 +306,36 @@ class PDFTranslator:
                 runs.append({
                     "text": word,
                     "bold": span.get("bold", False),
-                    "italic": span.get("italic", False)
+                    # "italic": span.get("italic", False)
                 })
 
         return runs
 
-    def _write_paragraph_to_docx(self, docx_doc, page, runs, paragraph, index, total):
+    def _write_paragraph_to_docx(self, docx_doc, page, runs, paragraph):
         para = docx_doc.add_paragraph()
         para_format = para.paragraph_format
 
-        para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-        # TODO: INDENT BASED ON THE DIFFERENCE BETWEEN THE START OF THE TEXT AND LEFT MARGIN AND END OF THE TEXT AND THE RIGHT MARGIN
-        para_format.first_line_indent = Pt(paragraph.get_font_size() * self.language_config.get_font_multiplier() * 2)
+        left_indent = int(paragraph.get_start()) - int(page.get_min_x())
+        right_indent = int(page.max_x) - int(paragraph.get_end())
+
+        if left_indent!= right_indent:
+            para.alignment = WD_ALIGN_PARAGRAPH.LEFT
+            if paragraph.get_start() != page.get_min_x():
+                para_format.first_line_indent = Pt(paragraph.get_font_size() * self.language_config.get_font_multiplier() * 2)
+            else:
+                para_format.first_line_indent = Pt(0)
+        else:
+            para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            para_format.first_line_indent = Pt(0)
+        para_format.space_after = Pt(paragraph.get_font_size() * 0.5)
+
         para_format.line_spacing = Pt(
             paragraph.get_font_size() *
             self.language_config.get_font_multiplier() *
             self.language_config.get_line_spacing_multiplier()
         )
+
         para_format.space_before = Pt(0)
-        para_format.space_after = Pt(paragraph.get_font_size() * 0.5 if index != total - 1 else 0)
 
         for run_info in runs:
             run = para.add_run(run_info["text"] + " ")
@@ -395,14 +346,11 @@ class PDFTranslator:
 
             if run_info.get("bold"):
                 run.bold = True
-            if run_info.get("italic"):
-                run.italic = True
 
     @staticmethod
     def _configure_docx_section(docx_doc):
         section = docx_doc.sections[0]
 
-    #     TRIAL CONFIG BASED ON RUBRIK
         # Set A4 size (default, but making it explicit)
         section.page_height = Inches(11.69)  # 297 mm
         section.page_width = Inches(8.27)  # 210 mm
@@ -426,12 +374,12 @@ class PDFTranslator:
 
             paragraphs = page.get_paragraphs()
 
-            for i,paragraph in enumerate(paragraphs):
+            for paragraph in paragraphs:
                 translated_para =self.translate_preserve_styles(paragraph, self.target_language_key)
 
                 runs = self.layout_paragraph(lines=translated_para.get_lines())
 
-                self._write_paragraph_to_docx(docx_doc,page , runs, paragraph, i, len(paragraphs))
+                self._write_paragraph_to_docx(docx_doc,page , runs, paragraph)
 
 
             output_docx_path = os.path.join(output_folder_path, "translated_output.docx")

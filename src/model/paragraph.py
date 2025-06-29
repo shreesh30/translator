@@ -14,6 +14,8 @@ class Paragraph:
     footer: List[Footer] = field(default_factory=list)
     font_size: float = field(default_factory=float)
     para_bbox: fitz.Rect = field(default_factory=fitz.Rect)
+    start: float = field(default_factory=float)
+    end: float = field(default_factory=float)
 
     def set_lines(self, lines):
         self.lines = lines
@@ -26,6 +28,12 @@ class Paragraph:
 
     def set_footers(self):
         pass
+
+    def set_start(self, start):
+        self.start = start
+
+    def set_end(self, end):
+        self.end = end
 
     def get_lines(self):
         return self.lines
@@ -41,3 +49,9 @@ class Paragraph:
 
     def get_footer(self):
         return self.footer
+
+    def get_start(self):
+        return self.start
+
+    def get_end(self):
+        return self.end

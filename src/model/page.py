@@ -53,7 +53,8 @@ class Page:
         paragraph.set_lines(lines)
         paragraph.set_font_size(font_size)
         paragraph.set_para_bbox(para_bbox)
-
+        paragraph.set_start(lines[0].get_line_bbox().x0)
+        paragraph.set_end(lines[-1].get_line_bbox().x1)
         return paragraph
 
 
@@ -99,6 +100,12 @@ class Page:
     def get_content_width(self):
         return self.content_width
 
+    def get_min_x(self):
+        return self.min_x
+
+    def get_max_x(self):
+        return self.max_x
+
     def compute_content_dimensions(self):
         self.content_width = self.max_x - self.min_x
         self.content_height = self.max_y - self.min_y
@@ -123,12 +130,13 @@ class Page:
             if is_new_line:
                 if current_line:
                     lines.append(current_line)
+
                 current_line = Line(page_number=self.number)
                 current_line.set_text(span["text"])
-                current_line.set_line_bbox(fitz.Rect(span["line_bbox"]))
                 current_line.set_bbox(fitz.Rect(span["bbox"]))
                 current_line.set_origin(span["origin"])
                 current_line.set_font_size(span["size"])
+                current_line.set_line_bbox(fitz.Rect(span["bbox"]))
             else:
                 # Update text
                 current_line.set_text(current_line.get_text() + " " + span["text"])
@@ -142,6 +150,9 @@ class Page:
                     max(current_line.get_bbox().y1, curr_bbox.y1),
                 )
                 current_line.set_bbox(updated_bbox)
+
+                # TODO: CHECK IF REMOVING LINE BBOX IS FINE OR NOT
+                current_line.set_line_bbox(updated_bbox)
 
                 # Update origin
                 origin_x = min(current_line.get_origin()[0], span["origin"][0])
@@ -168,7 +179,7 @@ class Page:
             is_new_para = (
                     i > 0 and (
                     line.get_page_number() != self.lines[i - 1].get_page_number() or
-                    (int(line.get_line_bbox().y0) - int(self.lines[i-1].get_line_bbox().y1)>=2)
+                    line.get_line_bbox().y0 - self.lines[i-1].get_line_bbox().y1>0
             )
             )
 
