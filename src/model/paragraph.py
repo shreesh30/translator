@@ -35,6 +35,9 @@ class Paragraph:
     def set_end(self, end):
         self.end = end
 
+    def set_page_number(self, page_number):
+        self.page_number = page_number
+
     def get_lines(self):
         return self.lines
 

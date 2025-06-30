@@ -38,8 +38,7 @@ class Page:
                 return rect.y1
         return None
 
-    @staticmethod
-    def _build_paragraph(lines):
+    def _build_paragraph(self, lines):
         x0s = [line.get_bbox().x0 for line in lines]
         y0s = [line.get_bbox().y0 for line in lines]
         x1s = [line.get_bbox().x1 for line in lines]
@@ -47,7 +46,7 @@ class Page:
 
         para_bbox = fitz.Rect(min(x0s), min(y0s), max(x1s), max(y1s))
         font_size = lines[0].get_font_size()
-        page_number = lines[0].get_page_number()
+        page_number = self.get_page_number()
 
         paragraph = Paragraph(page_number)
         paragraph.set_lines(lines)
@@ -106,6 +105,9 @@ class Page:
     def get_max_x(self):
         return self.max_x
 
+    def get_page_number(self):
+        return self.number
+
     def compute_content_dimensions(self):
         self.content_width = self.max_x - self.min_x
         self.content_height = self.max_y - self.min_y
@@ -131,7 +133,7 @@ class Page:
                 if current_line:
                     lines.append(current_line)
 
-                current_line = Line(page_number=self.number)
+                current_line = Line(page_number=self.get_page_number())
                 current_line.set_text(span["text"])
                 current_line.set_bbox(fitz.Rect(span["bbox"]))
                 current_line.set_origin(span["origin"])
@@ -177,7 +179,7 @@ class Page:
             is_new_para = (
                     i > 0 and (
                     line.get_page_number() != self.lines[i - 1].get_page_number() or
-                    line.get_line_bbox().y0 - self.lines[i-1].get_line_bbox().y1>0
+                    int(line.get_line_bbox().y0) - int(self.lines[i-1].get_line_bbox().y1)>0
             )
             )
 
