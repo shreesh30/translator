@@ -10,6 +10,7 @@ from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Inches, Pt
 from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
 from fitz import Rect
 from fontTools.ttLib import TTFont as FontToolsTTFont
 from reportlab.pdfbase import pdfmetrics
@@ -17,6 +18,7 @@ from reportlab.pdfbase.ttfonts import TTFont as ReportlabTTFont
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, BitsAndBytesConfig
 
 from src.model.page import Page
+from src.model.paragraph import Paragraph
 from src.model.line import Line
 from src.model.language_config import LanguageConfig
 from src.utils.utils import Utils
@@ -28,8 +30,6 @@ from src.utils.utils import Utils
 class PDFTranslator:
     BATCH_SIZE = 10
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-    TMP_DOCX = "resource/tmp/docx/temp.intermediate.docx"
-    OUTPUT_DOCX = "resource/output/translated.docx"
     CKPT_DIR = 'ai4bharat/indictrans2-en-indic-1B'
 
     def __init__(self,lang_config:LanguageConfig, quantization=None):
@@ -120,12 +120,12 @@ class PDFTranslator:
                     **inputs,
                     min_length=0,
                     max_length=512,
-                    num_beams=8,
+                    num_beams=6,
                     length_penalty=1.0,
                     early_stopping=True,
-                    repetition_penalty=1.3,
-                    do_sample=True,
-                    temperature = 0.6,
+                    repetition_penalty=1.1,
+                    # do_sample=True,
+                    # temperature = 0.8,
                     no_repeat_ngram_size=3
                 )
 
@@ -186,17 +186,24 @@ class PDFTranslator:
     def _parse_span(span: dict, page_num: int) -> Dict:
         """
         Parses a span and returns cleaned span information.
+        Converts ALL-UPPERCASE spans to Title Case (e.g., 'PREFACE' -> 'Preface', 'SIR B.N. RAU' -> 'Sir B.N. Rau').
         """
         text = span["text"].strip()
         if not text:
             return {}
 
         font = span["font"]
+
+        # Detect if the text is ALL CAPS and contains at least one letter
+        if text.isupper() and any(c.isalpha() for c in text):
+            text = text.title()
+
+        # Preserve bold styling if present in font name
         if "bold" in font.lower():
-            text = f"[3000]{text}[4000]"
+            text = f"[3001]{text}[4001]"
 
         return {
-            "text": text.lower(),
+            "text": text,
             "font": font,
             "size": span["size"],
             "page_num": page_num,
@@ -210,7 +217,7 @@ class PDFTranslator:
 
         for page in doc:
             blocks = page.get_text("dict", sort=True)["blocks"]
-            page_num = page.number + 1
+            page_num = page.number
             pg = Page(number=page_num)
             pg.add_drawings(page.get_cdrawings())
             min_x, max_x, min_y, max_y = self.get_content_dimensions(blocks)
@@ -266,7 +273,6 @@ class PDFTranslator:
         def flush_buffer():
             nonlocal buffer
             if buffer:
-                # style = {"bold": "b" in stack, "italic": "i" in stack}
                 style = {"bold": "b" in stack}
                 spans.append({"text": buffer.strip(), **style})
                 buffer = ""
@@ -306,13 +312,13 @@ class PDFTranslator:
                 runs.append({
                     "text": word,
                     "bold": span.get("bold", False),
-                    # "italic": span.get("italic", False)
                 })
 
         return runs
 
     def _write_paragraph_to_docx(self, docx_doc, page, runs, paragraph):
         para = docx_doc.add_paragraph()
+        self.set_rtl(para)
         para_format = para.paragraph_format
 
         left_indent = int(paragraph.get_start()) - int(page.get_min_x())
@@ -320,10 +326,7 @@ class PDFTranslator:
 
         if left_indent!= right_indent:
             para.alignment = WD_ALIGN_PARAGRAPH.LEFT
-            if paragraph.get_start() != page.get_min_x():
-                para_format.first_line_indent = Pt(paragraph.get_font_size() * self.language_config.get_font_multiplier() * 2)
-            else:
-                para_format.first_line_indent = Pt(0)
+            para_format.first_line_indent = Pt(paragraph.get_font_size() * self.language_config.get_font_multiplier() * 2)
         else:
             para.alignment = WD_ALIGN_PARAGRAPH.CENTER
             para_format.first_line_indent = Pt(0)
@@ -361,6 +364,54 @@ class PDFTranslator:
         section.left_margin = Inches(1.38)  # (210 - 140)/2 mm
         section.right_margin = Inches(1.38)
 
+    @staticmethod
+    def merge_paragraphs(paragraphs, pages):
+        merged_paragraphs = []
+        prev_paragraph = None
+
+        for paragraph in paragraphs:
+            curr_page_num = paragraph.get_page_number()
+            curr_start_x = int(paragraph.get_para_bbox().x0) if paragraph.get_para_bbox() else None
+            page_min_x = int(pages[curr_page_num].get_min_x())
+
+            should_merge = (
+                    prev_paragraph is not None and
+                    prev_paragraph.get_page_number() != curr_page_num and
+                    curr_start_x == page_min_x
+            )
+
+            if should_merge:
+                new_para = Paragraph()
+                combined_lines = prev_paragraph.get_lines() + paragraph.get_lines()
+
+                new_para.set_lines(combined_lines)
+                new_para.set_font_size(prev_paragraph.get_font_size())
+                new_para.set_para_bbox(None)  # You may want to recalculate a merged bbox instead
+                new_para.set_start(paragraph.get_start())
+                new_para.set_end(prev_paragraph.get_end())
+                new_para.set_page_number(prev_paragraph.get_page_number())
+
+                merged_paragraphs.append(new_para)
+                prev_paragraph = None  # Reset, since we've merged
+            else:
+                if prev_paragraph:
+                    merged_paragraphs.append(prev_paragraph)
+                prev_paragraph = paragraph
+
+        if prev_paragraph:
+            merged_paragraphs.append(prev_paragraph)
+
+        return merged_paragraphs
+
+    def set_rtl(self, paragraph):
+        if self.language_config.get_right_to_left():
+            """Set the paragraph to Right-to-Left (RTL) direction."""
+            p = paragraph._p  # Access the XML <w:p> element
+            pPr = p.get_or_add_pPr()
+            bidi = OxmlElement('w:bidi')
+            bidi.set(qn('w:val'), '1')  # Enable RTL
+            pPr.append(bidi)
+
     def process_pdf(self, input_folder_path: str,output_folder_path: str):
         # 1. Extract text with styling
         pages = self.extract_pages(input_folder_path)
@@ -368,29 +419,31 @@ class PDFTranslator:
         docx_doc = Document()
         self._configure_docx_section(docx_doc)
 
+        paragraphs = []
+
         for page in pages:
             page.process_page()
-            print(f'[INFO] Page: {page}')
+            paragraphs.extend(page.get_paragraphs())
 
-            paragraphs = page.get_paragraphs()
+        # merge paragraphs
+        merged_paragraphs = self.merge_paragraphs(paragraphs, pages)
 
-            for paragraph in paragraphs:
-                translated_para =self.translate_preserve_styles(paragraph, self.target_language_key)
+        print(f"[INFO] Merged Paragraphs: {merged_paragraphs}")
 
-                runs = self.layout_paragraph(lines=translated_para.get_lines())
+        for paragraph in merged_paragraphs:
+            translated_para = self.translate_preserve_styles(paragraph, self.target_language_key)
 
-                self._write_paragraph_to_docx(docx_doc,page , runs, paragraph)
+            runs = self.layout_paragraph(lines = translated_para.get_lines())
 
+            self._write_paragraph_to_docx(docx_doc, pages[paragraph.get_page_number()], runs, paragraph)
 
-            output_docx_path = os.path.join(output_folder_path, "translated_output.docx")
-            docx_doc.save(output_docx_path)
-
-
+        file_name = os.path.splitext(os.path.basename(input_folder_path))[0]
+        output_docx_path = os.path.join(output_folder_path, "{}.docx".format(file_name+self.language_config.get_target_language()))
+        docx_doc.save(output_docx_path)
            
             # TODO:
-            # 1. INDENT PARAGRAPHS BASED ON THEIR SPACING FROM THE LEFT, IF THEY HAVE SPACING SIMILAR TO THE START OF A PARAGRAPH, INDENT FROM LEFT OTHERWISE
-            #  IF SPACE BETWEEN START OF THE SENTENCE AND LEFT MARGIN AND END OF SENTENCE AND LEFT MARGIN IS SAME THEN MAKE THEM COME TO CENTER
-            # 1. SOME PARAGRAPHS SPLIT ON TO THE NEXT PAGE, AND THOSE PARAGRAPHS SHOULD NOT HAVE INDENTS
+            # 1. (CHECK THIS FIRST)SOME PARAGRAPHS SPLIT ON TO THE NEXT PAGE, AND THOSE PARAGRAPHS SHOULD NOT HAVE INDENTS
+            # 2. WHEN PROCESSING MULTIPLE PAGES IF A PARAGRAPH SPLITS TO THE NEXT PAGE BUT DURING TRANSLATION THEY FIT IN THE SAME PAGE THEN THE PARAGRAPH WILL BE ADDED AS A NEW PARAGRAPH WHICH WE DON'T WANT
             # 2. ATTACH FOOTERS TO PARAGRAPHS SO THAT THE FOOTER FOLLOWS THE PARAGRAPHS WHEREVER THE PARAGRAPH GOES
             # 3. ADD MARKERS FOR NEW LINE
             # 4. CHECK OUTPUT FOR MULTIPLE PAGES
