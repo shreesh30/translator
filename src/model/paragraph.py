@@ -26,8 +26,8 @@ class Paragraph:
     def set_para_bbox(self, para_bbox):
         self.para_bbox = para_bbox
 
-    def set_footers(self):
-        pass
+    def add_footers(self, footer):
+        self.footer.append(footer)
 
     def set_start(self, start):
         self.start = start

@@ -120,12 +120,14 @@ class PDFTranslator:
                     **inputs,
                     min_length=0,
                     max_length=512,
-                    num_beams=6,
+                    # num_beams=7,
+                    num_beams=4,
                     length_penalty=1.0,
                     early_stopping=True,
                     repetition_penalty=1.1,
-                    # do_sample=True,
+                    do_sample=True,
                     # temperature = 0.8,
+                    temperature = 0.7,
                     no_repeat_ngram_size=3
                 )
 
@@ -371,28 +373,33 @@ class PDFTranslator:
 
         for paragraph in paragraphs:
             curr_page_num = paragraph.get_page_number()
-            curr_start_x = int(paragraph.get_para_bbox().x0) if paragraph.get_para_bbox() else None
+            curr_bbox = paragraph.get_para_bbox()
+            curr_start_x = int(curr_bbox.x0) if curr_bbox else None
             page_min_x = int(pages[curr_page_num].get_min_x())
 
-            should_merge = (
+            is_merge_case = (
                     prev_paragraph is not None and
                     prev_paragraph.get_page_number() != curr_page_num and
                     curr_start_x == page_min_x
             )
 
-            if should_merge:
+            if is_merge_case:
+                # Merge prev and current paragraph
                 new_para = Paragraph()
-                combined_lines = prev_paragraph.get_lines() + paragraph.get_lines()
-
-                new_para.set_lines(combined_lines)
+                new_para.set_lines(prev_paragraph.get_lines() + paragraph.get_lines())
                 new_para.set_font_size(prev_paragraph.get_font_size())
-                new_para.set_para_bbox(None)  # You may want to recalculate a merged bbox instead
+                new_para.set_para_bbox(None)  # Optional: compute merged bbox if needed
                 new_para.set_start(paragraph.get_start())
                 new_para.set_end(prev_paragraph.get_end())
                 new_para.set_page_number(prev_paragraph.get_page_number())
 
+                # Merge footers correctly
+                combined_footers = prev_paragraph.get_footer() + paragraph.get_footer()
+                for footer in combined_footers:
+                    new_para.add_footers(footer)
+
                 merged_paragraphs.append(new_para)
-                prev_paragraph = None  # Reset, since we've merged
+                prev_paragraph = None
             else:
                 if prev_paragraph:
                     merged_paragraphs.append(prev_paragraph)
@@ -438,20 +445,17 @@ class PDFTranslator:
             self._write_paragraph_to_docx(docx_doc, pages[paragraph.get_page_number()], runs, paragraph)
 
         file_name = os.path.splitext(os.path.basename(input_folder_path))[0]
-        output_docx_path = os.path.join(output_folder_path, "{}.docx".format(file_name+self.language_config.get_target_language()))
+        output_docx_path = os.path.join(output_folder_path, "{}.docx".format(file_name+'_'+self.language_config.get_target_language()))
         docx_doc.save(output_docx_path)
            
             # TODO:
-            # 1. (CHECK THIS FIRST)SOME PARAGRAPHS SPLIT ON TO THE NEXT PAGE, AND THOSE PARAGRAPHS SHOULD NOT HAVE INDENTS
-            # 2. WHEN PROCESSING MULTIPLE PAGES IF A PARAGRAPH SPLITS TO THE NEXT PAGE BUT DURING TRANSLATION THEY FIT IN THE SAME PAGE THEN THE PARAGRAPH WILL BE ADDED AS A NEW PARAGRAPH WHICH WE DON'T WANT
-            # 2. ATTACH FOOTERS TO PARAGRAPHS SO THAT THE FOOTER FOLLOWS THE PARAGRAPHS WHEREVER THE PARAGRAPH GOES
-            # 3. ADD MARKERS FOR NEW LINE
-            # 4. CHECK OUTPUT FOR MULTIPLE PAGES
-            # 5. ADD TABS FOR LINES WITHIN THE SAME PARAGRAPHS, AS SOME TEXTS IN THE SAME PARAGRAPHS ARE EITHER CENTERED OR LEFT ALIGNED OR RIGHT ALIGNED,
+            # 1. ADD MARKERS FOR NEW LINE
+            # 2. CHECK OUTPUT FOR MULTIPLE PAGES
+            # 3. ADD TABS FOR LINES WITHIN THE SAME PARAGRAPHS, AS SOME TEXTS IN THE SAME PARAGRAPHS ARE EITHER CENTERED OR LEFT ALIGNED OR RIGHT ALIGNED,
             # OR HAVE SOME TABS, SO LOOK INTO HOW I CAN MAINTAIN THE FORMAT IN THE TRANSLATED DOCUMENT
-            # 6. FOR MULTIPLE PAGES, CHECK LINE SPACING(AND DO WE NEED TO HANDLE LINE SPACING DIFFERENTLY FOR DIFFERENT PAGES)
-            # 7. HANDLE HEADERS AND FOOTERS DIFFERENTLY
-            # 8. MANAGE FORMAT BETTER
+            # 4. FOR MULTIPLE PAGES, CHECK LINE SPACING(AND DO WE NEED TO HANDLE LINE SPACING DIFFERENTLY FOR DIFFERENT PAGES)
+            # 5. HANDLE HEADERS AND FOOTERS DIFFERENTLY
+            # 6. MANAGE FORMAT BETTER
 
         '''Texts like below are appearing as separate paragraphs
                 1. The Hon’ble Sri C. Rajagopalachariar.
