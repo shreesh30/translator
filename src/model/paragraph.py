@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from typing import List
 
@@ -16,6 +18,7 @@ class Paragraph:
     para_bbox: fitz.Rect = field(default_factory=fitz.Rect)
     start: float = field(default_factory=float)
     end: float = field(default_factory=float)
+    sub_paragraphs: List[Paragraph] = field(default_factory=list)
 
     def set_lines(self, lines):
         self.lines = lines
@@ -38,6 +41,12 @@ class Paragraph:
     def set_page_number(self, page_number):
         self.page_number = page_number
 
+    def set_sub_paragraphs(self, sub_paragraphs):
+        self.sub_paragraphs = sub_paragraphs
+
+    def add_sub_paragraph(self,  sub_paragraph):
+        self.sub_paragraphs.append(sub_paragraph)
+
     def get_lines(self):
         return self.lines
 
@@ -58,3 +67,6 @@ class Paragraph:
 
     def get_end(self):
         return self.end
+
+    def get_sub_paragraphs(self):
+        return self.sub_paragraphs

@@ -2,6 +2,7 @@ import fitz
 import re
 import string
 
+from src.model.span import Span
 from src.model.header import Header
 from src.model.footer import Footer
 from src.model.paragraph import Paragraph
@@ -13,7 +14,7 @@ from typing import List, Dict
 @dataclass
 class Page:
     number: int = field(default_factory=int)
-    spans: List[Dict]  = field(default_factory=list, repr=False)
+    spans: List[Span]  = field(default_factory=list, repr=True)
     lines: List[Line] = field(default_factory=list, repr = False)
     paragraphs: List[Paragraph] = field(default_factory=list)
     headers: List[Header] = field(default_factory=list)
@@ -39,12 +40,12 @@ class Page:
         return None
 
     def _build_paragraph(self, lines):
-        x0s = [line.get_bbox().x0 for line in lines]
-        y0s = [line.get_bbox().y0 for line in lines]
-        x1s = [line.get_bbox().x1 for line in lines]
-        y1s = [line.get_bbox().y1 for line in lines]
+        x0 = lines[0].get_bbox().x0
+        y0 = lines[0].get_bbox().y0
+        x1 = lines[-1].get_bbox().x1
+        y1 = lines[-1].get_bbox().y1
 
-        para_bbox = fitz.Rect(min(x0s), min(y0s), max(x1s), max(y1s))
+        para_bbox = fitz.Rect(x0, y0, x1, y1)
         font_size = lines[0].get_font_size()
         page_number = self.get_page_number()
 
@@ -121,12 +122,12 @@ class Page:
         current_line = None
 
         for span in self.spans:
-            if not span.get("text"):
+            if not span.get_text():
                 continue
 
             is_new_line = (
                     current_line is None or
-                    span["bbox"].y1 - current_line.get_bbox().y1 > 1
+                    span.get_bbox().y1 - current_line.get_bbox().y1 > 1
             )
 
             if is_new_line:
@@ -134,20 +135,20 @@ class Page:
                     lines.append(current_line)
 
                 current_line = Line(page_number=self.get_page_number())
-                current_line.set_text(span["text"])
-                current_line.set_bbox(fitz.Rect(span["bbox"]))
-                current_line.set_origin(span["origin"])
-                current_line.set_font_size(span["size"])
-                current_line.set_line_bbox(fitz.Rect(span["bbox"]))
+                current_line.set_text(span.get_text())
+                current_line.set_bbox(fitz.Rect(span.get_bbox()))
+                current_line.set_origin(span.get_origin())
+                current_line.set_font_size(span.get_font_size())
+                current_line.set_line_bbox(fitz.Rect(span.get_bbox()))
             else:
                 # Update text
-                current_line.set_text(current_line.get_text() + " " + span["text"])
+                current_line.set_text(current_line.get_text() + " " + span.get_text())
 
                 # Update bbox
-                curr_bbox = span["bbox"]
+                curr_bbox = span.get_bbox()
                 updated_bbox = fitz.Rect(
-                    min(current_line.get_bbox().x0, curr_bbox.x0),
-                    min(current_line.get_bbox().y0, curr_bbox.y0),
+                    current_line.get_bbox().x0,
+                    current_line.get_bbox().y0,
                     max(current_line.get_bbox().x1, curr_bbox.x1),
                     max(current_line.get_bbox().y1, curr_bbox.y1),
                 )
@@ -155,12 +156,12 @@ class Page:
                 current_line.set_line_bbox(updated_bbox)
 
                 # Update origin
-                origin_x = min(current_line.get_origin()[0], span["origin"][0])
-                origin_y = max(current_line.get_origin()[1], span["origin"][1])
+                origin_x = min(current_line.get_origin()[0], span.get_origin()[0])
+                origin_y = max(current_line.get_origin()[1], span.get_origin()[1])
                 current_line.set_origin((origin_x, origin_y))
 
                 # Update font size
-                current_line.set_font_size(max(current_line.font_size, span["size"]))
+                current_line.set_font_size(max(current_line.font_size, span.get_font_size()))
 
 
         if current_line:
@@ -284,15 +285,15 @@ class Page:
         punctuation_set = set(string.punctuation + '’‘“”—–')  # common typographic symbols
 
         for span in self.spans:
-            if not span.get("text"):
+            if not span.get_text():
                 continue
 
-            text = span["text"].strip()
+            text = span.get_text().strip()
             is_punctuation = all(char in punctuation_set for char in text)
 
             is_new_line = (
                     not prev_span or
-                    abs(span["bbox"].y1 - prev_span["bbox"].y1) > 1.0
+                    abs(span.get_bbox().y1 - prev_span.get_bbox().y1) > 1.0
             )
 
             if is_new_line:
@@ -302,18 +303,18 @@ class Page:
                 continue
 
             if is_punctuation:
-                prev_span['text'] += span['text']
-                prev_span['bbox'].x1 = span['bbox'].x1
+                prev_span.set_text(prev_span.get_text()+span.get_text())
+                prev_span.get_bbox().x1 = span.get_bbox().x1
                 continue
 
-            x_gap = span['bbox'].x0 - prev_span['bbox'].x1
+            x_gap = span.get_bbox().x0 - prev_span.get_bbox().x1
 
-            if span["size"] < prev_span["size"]:
+            if span.get_font_size() < prev_span.get_font_size():
                 if x_gap <= 1.0:
-                    prev_span['text'] += span['text']
+                    prev_span.set_text(prev_span.get_text()+span.get_text())
                 else:
-                    prev_span['text'] += ' ' + span['text']
-                prev_span['bbox'].x1 = span['bbox'].x1
+                    prev_span.set_text(prev_span.get_text()+" "+span.get_text())
+                prev_span.get_bbox().x1 = span.get_bbox().x1
             else:
                 normalized.append(prev_span)
                 prev_span = span

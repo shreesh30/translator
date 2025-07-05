@@ -17,6 +17,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont as ReportlabTTFont
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, BitsAndBytesConfig
 
+from src.model.span import Span
 from src.model.page import Page
 from src.model.paragraph import Paragraph
 from src.model.line import Line
@@ -120,13 +121,11 @@ class PDFTranslator:
                     **inputs,
                     min_length=0,
                     max_length=512,
-                    # num_beams=7,
-                    num_beams=4,
+                    num_beams=7,
                     length_penalty=1.0,
                     early_stopping=True,
                     repetition_penalty=1.1,
                     do_sample=True,
-                    # temperature = 0.8,
                     temperature = 0.7,
                     no_repeat_ngram_size=3
                 )
@@ -143,6 +142,7 @@ class PDFTranslator:
 
             final = self.processor.postprocess_batch(decoded, lang=tgt_lang)
             print(f"[DEBUG] Postprocessed Translations: {final}")
+            print(f"[DEBUG] Translated: {final[0]}")
 
             # Define tag replacements
 
@@ -185,7 +185,7 @@ class PDFTranslator:
         return min_x, max_x, min_y, max_y
 
     @staticmethod
-    def _parse_span(span: dict, page_num: int) -> Dict:
+    def _parse_span(span: dict, page_num: int):
         """
         Parses a span and returns cleaned span information.
         Converts ALL-UPPERCASE spans to Title Case (e.g., 'PREFACE' -> 'Preface', 'SIR B.N. RAU' -> 'Sir B.N. Rau').
@@ -202,16 +202,17 @@ class PDFTranslator:
 
         # Preserve bold styling if present in font name
         if "bold" in font.lower():
-            text = f"[3001]{text}[4001]"
+            text = f"\\uE000{text}\\uE001"
 
-        return {
-            "text": text,
-            "font": font,
-            "size": span["size"],
-            "page_num": page_num,
-            "origin": span["origin"],
-            "bbox": fitz.Rect(span["bbox"]),
-        }
+        new_span = Span()
+        new_span.set_text(text)
+        new_span.set_font(font)
+        new_span.set_font_size(span["size"])
+        new_span.set_page_num(page_num)
+        new_span.set_origin(span["origin"])
+        new_span.set_bbox(fitz.Rect(span["bbox"]))
+
+        return new_span
 
     def extract_pages(self, pdf_path: str) -> List[Page]:
         doc = fitz.open(pdf_path)
@@ -230,22 +231,21 @@ class PDFTranslator:
                     continue
                 for line in block.get("lines", []):
                     for span in line.get("spans", []):
-                        parsed = self._parse_span(span, page_num)
-                        if parsed:
-                            pg.add_span(parsed)
+                        new_span = self._parse_span(span, page_num)
+                        pg.add_span(new_span)
 
             pages.append(pg)
 
         return pages
 
-    def translate_preserve_styles(self,paragraph, tgt_lang):
+    def translate_preserve_styles(self,paragraph):
         paragraph_bbox = paragraph.get_para_bbox()
 
         # 1. Apply invisible style markers
         text = " ".join(line.get_text() for line in paragraph.get_lines())
 
         # Translate with context
-        translated = self.translate_text(text, tgt_lang)
+        translated = self.translate_text(text, self.target_language_key)
 
         text = " ".join(translated)
 
@@ -260,13 +260,20 @@ class PDFTranslator:
 
         paragraph.set_lines([new_line])
 
+        if paragraph.get_sub_paragraphs():
+            sub_para = []
+            for para in paragraph.get_sub_paragraphs():
+                sub_para.append(self.translate_preserve_styles(para))
+            paragraph.set_sub_paragraphs(sub_para)
+
+
         return paragraph
 
     @staticmethod
     def parse_styled_spans(text):
         """
-        Parses the HTML-like text (<b>, <i>) and returns a list of spans.
-        Each span is a dict with keys: text, bold, italic.
+        Parses HTML-like text (e.g., <b>, <n>) into a list of spans.
+        Each span is a dict with keys: text, bold, newline.
         """
         spans = []
         stack = []
@@ -274,83 +281,104 @@ class PDFTranslator:
 
         def flush_buffer():
             nonlocal buffer
-            if buffer:
-                style = {"bold": "b" in stack}
+            if buffer.strip():
+                style = {
+                    "bold": "b" in stack,
+                }
                 spans.append({"text": buffer.strip(), **style})
-                buffer = ""
+            buffer = ""
 
-        tokens = re.split(r"(<\/?b>)", text)
+        # Updated regex to capture <b>, </b>
+        tokens = re.split(r'(<\/?b>)', text)
 
         for token in tokens:
-            if token == "":
+            if not token:
                 continue
-            if token in "<b>":
+            if token == "<b>":
                 flush_buffer()
-                stack.append(token[1])  # add 'b'
-            elif token in "</b>":
+                stack.append("b")
+            elif token == "</b>":
                 flush_buffer()
-                tag = token[2]
-                if tag in stack:
-                    stack.remove(tag)
+                if "b" in stack:
+                    stack.remove("b")
             else:
                 buffer += token
 
         flush_buffer()
         return spans
 
-    def layout_paragraph(self, lines):
-        """
-        Prepare styled word runs for insertion into DOCX.
-        No need to calculate line breaks — Word handles wrapping.
-        """
+    def _write_paragraph_to_docx(self, docx_doc, page, paragraph):
+        section = docx_doc.sections[0]
+        new_para = docx_doc.add_paragraph()
+        self.set_rtl(new_para)
 
-        text = " ".join(line.get_text() for line in lines)
+        self._set_paragraph_alignment_and_indent(new_para, paragraph, page, section)
+        self._set_paragraph_spacing(new_para, paragraph)
 
-        styled_spans = self.parse_styled_spans(text)
-        runs = []
+        translated_text = " ".join(line.get_text() for line in paragraph.get_lines())
+        self._add_text_with_styling(new_para, translated_text, paragraph)
 
-        for span in styled_spans:
-            for word in span["text"].split():
-                runs.append({
-                    "text": word,
-                    "bold": span.get("bold", False),
-                })
+        self._process_sub_paragraphs(docx_doc, paragraph, section)
 
-        return runs
+    def _set_paragraph_alignment_and_indent(self, paragraph_obj, paragraph_data, page, section):
+        para_format = paragraph_obj.paragraph_format
+        left_indent = int(paragraph_data.get_start()) - int(page.get_min_x())
+        right_indent = int(page.max_x) - int(paragraph_data.get_end())
 
-    def _write_paragraph_to_docx(self, docx_doc, page, runs, paragraph):
-        para = docx_doc.add_paragraph()
-        self.set_rtl(para)
-        para_format = para.paragraph_format
-
-        left_indent = int(paragraph.get_start()) - int(page.get_min_x())
-        right_indent = int(page.max_x) - int(paragraph.get_end())
-
-        if left_indent!= right_indent:
-            para.alignment = WD_ALIGN_PARAGRAPH.LEFT
-            para_format.first_line_indent = Pt(paragraph.get_font_size() * self.language_config.get_font_multiplier() * 2)
+        if left_indent != right_indent:
+            paragraph_obj.alignment = WD_ALIGN_PARAGRAPH.LEFT
+            bbox_x0_in = int(paragraph_data.get_para_bbox().x0) / 72
+            relative_indent_in = (bbox_x0_in - section.left_margin.inches) / 2
+            relative_indent_in = 0 if relative_indent_in < 0.2 else relative_indent_in
+            para_format.first_line_indent = Inches(relative_indent_in)
         else:
-            para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            paragraph_obj.alignment = WD_ALIGN_PARAGRAPH.CENTER
             para_format.first_line_indent = Pt(0)
-        para_format.space_after = Pt(paragraph.get_font_size() * 0.5)
 
+    def _set_paragraph_spacing(self, paragraph_obj, paragraph_data):
+        para_format = paragraph_obj.paragraph_format
+        para_format.space_after = Pt(paragraph_data.get_font_size() * 0.5)
         para_format.line_spacing = Pt(
-            paragraph.get_font_size() *
+            paragraph_data.get_font_size() *
             self.language_config.get_font_multiplier() *
             self.language_config.get_line_spacing_multiplier()
         )
-
         para_format.space_before = Pt(0)
 
-        for run_info in runs:
-            run = para.add_run(run_info["text"] + " ")
-            run.font.size = Pt(paragraph.get_font_size() * self.language_config.get_font_multiplier())
+    def _add_text_with_styling(self, paragraph_obj, text, paragraph_data):
+        spans = self.parse_styled_spans(text)
+        for span in spans:
+            run = paragraph_obj.add_run(span["text"] + " ")
+            run.font.size = Pt(paragraph_data.get_font_size() * self.language_config.get_font_multiplier())
             run.font.name = self.font_name
-            r = run._element
-            r.rPr.rFonts.set(qn('w:eastAsia'), self.font_name)
-
-            if run_info.get("bold"):
+            run._element.rPr.rFonts.set(qn('w:eastAsia'), self.font_name)
+            if span.get("bold"):
                 run.bold = True
+
+    def _process_sub_paragraphs(self, docx_doc, paragraph_data, section):
+        if not paragraph_data.get_sub_paragraphs():
+            return
+
+        for sub_para in paragraph_data.get_sub_paragraphs():
+            new_para = docx_doc.add_paragraph()
+            para_format = new_para.paragraph_format
+
+            new_para.alignment = WD_ALIGN_PARAGRAPH.LEFT
+            bbox_x0_in = int(sub_para.get_para_bbox().x0) / 72
+            relative_indent_in = (bbox_x0_in - section.left_margin.inches) / 2
+            relative_indent_in = 0 if relative_indent_in < 0.2 else relative_indent_in
+            para_format.first_line_indent = Inches(relative_indent_in)
+
+            para_format.line_spacing = Pt(
+                paragraph_data.get_font_size() *
+                self.language_config.get_font_multiplier() *
+                self.language_config.get_line_spacing_multiplier()
+            )
+            para_format.space_before = Pt(0)
+            para_format.space_after = Pt(0)
+
+            translated_text = " ".join(line.get_text() for line in sub_para.get_lines())
+            self._add_text_with_styling(new_para, translated_text, paragraph_data)
 
     @staticmethod
     def _configure_docx_section(docx_doc):
@@ -365,6 +393,70 @@ class PDFTranslator:
         section.bottom_margin = Inches(1.48)
         section.left_margin = Inches(1.38)  # (210 - 140)/2 mm
         section.right_margin = Inches(1.38)
+
+    @staticmethod
+    def create_sub_paragraphs(merged_paragraphs, pages):
+        for paragraph in merged_paragraphs:
+            original_lines = paragraph.get_lines()
+            new_main_lines = []
+            i = 0
+            while i < len(original_lines):
+                line = original_lines[i]
+                page = pages[line.get_page_number()]
+                min_x = page.get_min_x()
+                max_x = page.get_max_x()
+                line_bbox = line.get_line_bbox()
+
+                new_sub_para = (int(line_bbox.x0) != int(min_x)) or (
+                            i > 0 and int(original_lines[i - 1].get_line_bbox().x1) != int(max_x))
+
+                if i == 0:
+                    # Always keep the first line in the main paragraph
+                    new_main_lines.append(line)
+                    i += 1
+                    continue
+
+                if new_sub_para:
+                    # Start new sub-paragraph
+                    sub_paragraph = Paragraph(
+                        page_number=line.get_page_number(),
+                        lines=[line],
+                        font_size=line.get_font_size(),
+                        para_bbox=line_bbox,
+                        start=line_bbox.x0,
+                        end=line_bbox.x1
+                    )
+                    paragraph.add_sub_paragraph(sub_paragraph)
+                    # Remove this line from main paragraph
+                    i += 1
+
+                    # Add following non-indented lines to this sub-paragraph
+                    while i < len(original_lines):
+                        next_line = original_lines[i]
+                        next_bbox = next_line.get_line_bbox()
+                        next_min_x = pages[next_line.get_page_number()].get_min_x()
+
+                        next_is_indented = int(next_bbox.x0) != int(next_min_x)
+
+                        if next_is_indented:
+                            # Start of a new sub-paragraph → break
+                            break
+
+                        # Add to current sub-paragraph
+                        sub_paragraph.get_lines().append(next_line)
+                        bbox = sub_paragraph.get_para_bbox()
+                        bbox.y1 = max(bbox.y1, next_bbox.y1)
+                        bbox.x1 = max(bbox.x1, next_bbox.x1)
+                        sub_paragraph.set_end(bbox.x1)
+
+                        i += 1
+                else:
+                    # Not indented → part of main paragraph
+                    new_main_lines.append(line)
+                    i += 1
+
+            # Set only top-level lines to the paragraph
+            paragraph.set_lines(new_main_lines)
 
     @staticmethod
     def merge_paragraphs(paragraphs, pages):
@@ -437,15 +529,16 @@ class PDFTranslator:
 
         print(f"[INFO] Merged Paragraphs: {merged_paragraphs}")
 
+        self.create_sub_paragraphs(merged_paragraphs, pages)
+
+        print(f'[INFO] Finalised Paragraphs: {merged_paragraphs}')
+
         for paragraph in merged_paragraphs:
-            translated_para = self.translate_preserve_styles(paragraph, self.target_language_key)
-
-            runs = self.layout_paragraph(lines = translated_para.get_lines())
-
-            self._write_paragraph_to_docx(docx_doc, pages[paragraph.get_page_number()], runs, paragraph)
-
+            translated_para = self.translate_preserve_styles(paragraph)
+            print(f'Translated Paragraph: {translated_para}')
+            self._write_paragraph_to_docx(docx_doc, pages[paragraph.get_page_number()], paragraph)
         file_name = os.path.splitext(os.path.basename(input_folder_path))[0]
-        output_docx_path = os.path.join(output_folder_path, "{}.docx".format(file_name+'_'+self.language_config.get_target_language()))
+        output_docx_path = os.path.join(output_folder_path,"{}.docx".format(file_name + '_' + self.language_config.get_target_language()))
         docx_doc.save(output_docx_path)
            
             # TODO:
@@ -469,9 +562,6 @@ class PDFTranslator:
                 We change the logic to see if the left margin-start of line==right margin-end of line, if that is the
                 case then we need to centre the line else we will have to make it stic to the right
             '''
-            
 
 
-        #
-        #
 
