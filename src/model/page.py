@@ -40,9 +40,22 @@ class Page:
         return None
 
     def _build_paragraph(self, lines):
+        paragraph_centered = False
+        for line in lines:
+            left_indent = int(line.get_bbox().x0) - int(self.get_min_x())
+            right_indent = int(self.get_max_x()) - int(line.get_bbox().x1)
+            if left_indent==right_indent:
+                paragraph_centered = True
+            else:
+                paragraph_centered = False
+
+
         x0 = lines[0].get_bbox().x0
         y0 = lines[0].get_bbox().y0
-        x1 = lines[-1].get_bbox().x1
+        if paragraph_centered:
+            x1= lines[0].get_bbox().x1
+        else:
+            x1 = lines[-1].get_bbox().x1
         y1 = lines[-1].get_bbox().y1
 
         para_bbox = fitz.Rect(x0, y0, x1, y1)
@@ -53,8 +66,8 @@ class Page:
         paragraph.set_lines(lines)
         paragraph.set_font_size(font_size)
         paragraph.set_para_bbox(para_bbox)
-        paragraph.set_start(lines[0].get_line_bbox().x0)
-        paragraph.set_end(lines[-1].get_line_bbox().x1)
+        paragraph.set_start(para_bbox.x0)
+        paragraph.set_end(para_bbox.x1)
         return paragraph
 
 

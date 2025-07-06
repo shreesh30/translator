@@ -1,6 +1,7 @@
 import re
 import sys
-from typing import Tuple, List, Dict
+from typing import Tuple, List
+from collections import Counter
 
 import os
 import fitz
@@ -307,33 +308,35 @@ class PDFTranslator:
         flush_buffer()
         return spans
 
-    def _write_paragraph_to_docx(self, docx_doc, page, paragraph):
+    def _write_paragraph_to_docx(self, docx_doc, page, paragraph, para_start):
         section = docx_doc.sections[0]
         new_para = docx_doc.add_paragraph()
         self.set_rtl(new_para)
 
-        self._set_paragraph_alignment_and_indent(new_para, paragraph, page, section)
+        self._set_paragraph_alignment_and_indent(new_para, paragraph, page, section, para_start)
         self._set_paragraph_spacing(new_para, paragraph)
 
         translated_text = " ".join(line.get_text() for line in paragraph.get_lines())
         self._add_text_with_styling(new_para, translated_text, paragraph)
 
-        self._process_sub_paragraphs(docx_doc, paragraph, section, page)
+        self._process_sub_paragraphs(docx_doc, paragraph, section, page, para_start)
 
     @staticmethod
-    def _set_paragraph_alignment_and_indent(paragraph_obj, paragraph_data, page, section):
+    def _set_paragraph_alignment_and_indent(paragraph_obj, paragraph_data, page, section, para_start):
         para_format = paragraph_obj.paragraph_format
         left_indent = int(paragraph_data.get_start()) - int(page.get_min_x())
-        right_indent = int(page.max_x) - int(paragraph_data.get_end())
+        right_indent = int(page.get_max_x()) - int(paragraph_data.get_end())
 
         if left_indent != right_indent:
-            # check if the paragraph's starting point is way beyond normal paragraph starting point, if so align it to the right else align it to the left
-
-            paragraph_obj.alignment = WD_ALIGN_PARAGRAPH.LEFT
-            bbox_x0_in = int(paragraph_data.get_para_bbox().x0) / 72
-            relative_indent_in = (bbox_x0_in - section.left_margin.inches)
-            relative_indent_in = 0 if int(paragraph_data.get_para_bbox().x0)==int(page.get_min_x()) else relative_indent_in
-            para_format.first_line_indent = Inches(relative_indent_in)
+            if int(paragraph_data.get_start())!=int(para_start):
+                paragraph_obj.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                para_format.first_line_indent = Inches(0)
+            else:
+                paragraph_obj.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                bbox_x0_in = int(paragraph_data.get_para_bbox().x0) / 72
+                relative_indent_in = (bbox_x0_in - section.left_margin.inches)
+                relative_indent_in = 0 if int(paragraph_data.get_para_bbox().x0)==int(page.get_min_x()) else relative_indent_in
+                para_format.first_line_indent = Inches(relative_indent_in)
         else:
             paragraph_obj.alignment = WD_ALIGN_PARAGRAPH.CENTER
             para_format.first_line_indent = Pt(0)
@@ -358,7 +361,7 @@ class PDFTranslator:
             if span.get("bold"):
                 run.bold = True
 
-    def _process_sub_paragraphs(self, docx_doc, paragraph_data, section, page):
+    def _process_sub_paragraphs(self, docx_doc, paragraph_data, section, page, para_start):
         if not paragraph_data.get_sub_paragraphs():
             return
 
@@ -366,11 +369,16 @@ class PDFTranslator:
             new_para = docx_doc.add_paragraph()
             para_format = new_para.paragraph_format
 
-            new_para.alignment = WD_ALIGN_PARAGRAPH.LEFT
-            bbox_x0_in = int(sub_para.get_para_bbox().x0) / 72
-            relative_indent_in = bbox_x0_in - section.left_margin.inches
-            relative_indent_in = 0 if int(paragraph_data.get_para_bbox().x0)==int(page.get_min_x()) else relative_indent_in
-            para_format.first_line_indent = Inches(relative_indent_in)
+
+            if int(paragraph_data.get_start()) > int(para_start) and int(paragraph_data.get_end())==int(page.get_max_x()):
+                new_para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                para_format.first_line_indent = Inches(0)
+            else:
+                new_para.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                bbox_x0_in = int(sub_para.get_para_bbox().x0) / 72
+                relative_indent_in = bbox_x0_in - section.left_margin.inches
+                relative_indent_in = 0 if int(paragraph_data.get_para_bbox().x0)==int(page.get_min_x()) else relative_indent_in
+                para_format.first_line_indent = Inches(relative_indent_in)
 
             para_format.line_spacing = Pt(
                 paragraph_data.get_font_size() *
@@ -409,9 +417,14 @@ class PDFTranslator:
                 min_x = page.get_min_x()
                 max_x = page.get_max_x()
                 line_bbox = line.get_line_bbox()
+                left_indent = int(line.get_line_bbox().x0) - int(page.get_min_x())
+                right_indent = int(page.get_max_x()) - int(line.get_line_bbox().x1)
 
-                new_sub_para = (int(line_bbox.x0) != int(min_x)) or (
-                            i > 0 and int(original_lines[i - 1].get_line_bbox().x1) != int(max_x))
+                is_indented_line = int(line_bbox.x0) != int(min_x)
+                is_prev_line_short = (i > 0 and int(original_lines[i - 1].get_line_bbox().x1) != int(max_x))
+                layout_is_irregular = left_indent != right_indent
+
+                new_sub_para = (is_indented_line or is_prev_line_short) and layout_is_irregular
 
                 if i == 0:
                     # Always keep the first line in the main paragraph
@@ -533,32 +546,37 @@ class PDFTranslator:
             )
             page.process_page()
             paragraphs.extend(page.get_paragraphs())
-
         # merge paragraphs
         merged_paragraphs = self.merge_paragraphs(paragraphs, pages)
 
         print(f"[INFO] Merged Paragraphs: {merged_paragraphs}")
-
         self.create_sub_paragraphs(merged_paragraphs, pages)
 
         print(f'[INFO] Finalised Paragraphs: {merged_paragraphs}')
 
+        # Assuming `pages` is your list of page objects
+        para_start_values = [para.get_start() for para in merged_paragraphs]
+
+        # Count occurrences of each start value
+        counter = Counter(para_start_values)
+
+        # Get the most common start value
+        para_start = counter.most_common(1)[0][0]
+
         for paragraph in merged_paragraphs:
             translated_para = self.translate_preserve_styles(paragraph)
             print(f'Translated Paragraph: {translated_para}')
-            self._write_paragraph_to_docx(docx_doc, pages[paragraph.get_page_number()], paragraph)
+            self._write_paragraph_to_docx(docx_doc, pages[paragraph.get_page_number()], paragraph, para_start)
         file_name = os.path.splitext(os.path.basename(input_folder_path))[0]
         output_docx_path = os.path.join(output_folder_path,"{}.docx".format(file_name + '_' + self.language_config.get_target_language()))
         docx_doc.save(output_docx_path)
-           
+
             # TODO:
-            # 1. SOME PARAGRAPHS ARE RIGHT ALIGNED, CHECK IF WE CAN HANDLE THAT
-            # 2. CHECK OUTPUT FOR MULTIPLE PAGES
-            # 3. ADD TABS FOR LINES WITHIN THE SAME PARAGRAPHS, AS SOME TEXTS IN THE SAME PARAGRAPHS ARE EITHER CENTERED OR LEFT ALIGNED OR RIGHT ALIGNED,
-            # OR HAVE SOME TABS, SO LOOK INTO HOW I CAN MAINTAIN THE FORMAT IN THE TRANSLATED DOCUMENT
-            # 4. FOR MULTIPLE PAGES, CHECK LINE SPACING(AND DO WE NEED TO HANDLE LINE SPACING DIFFERENTLY FOR DIFFERENT PAGES)
-            # 5. HANDLE HEADERS AND FOOTERS DIFFERENTLY
-            # 6. MANAGE FORMAT BETTER
+            # 1. ADD TRANSLATED FOOTERS TO THE BOTTOM OF THE PAGE WHEREVER THE PARAGRAPH EXISTS
+            # 2. HANDLE TABLES
+            # 3. ADD TRANSLATED HEADERS TO THE TOP OF THE PAGE
+            # 4. HANDLE HEADERS AND FOOTERS DIFFERENTLY
+            # 5. MANAGE FORMAT BETTER
 
         '''Texts like below are appearing as separate paragraphs
                 1. The Hon’ble Sri C. Rajagopalachariar.
