@@ -1,2 +1,2 @@
 class Utils:
-    tag_map={'\\uE000': '<b>','\\uE001': '</b>'}
+    tag_map={'\\ue000': '<b>','\\ue001': '</b>'}

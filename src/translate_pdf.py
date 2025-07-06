@@ -121,7 +121,7 @@ class PDFTranslator:
                     **inputs,
                     min_length=0,
                     max_length=512,
-                    num_beams=7,
+                    num_beams=6,
                     length_penalty=1.0,
                     early_stopping=True,
                     repetition_penalty=1.1,
@@ -195,14 +195,14 @@ class PDFTranslator:
             return {}
 
         font = span["font"]
-
-        # Detect if the text is ALL CAPS and contains at least one letter
-        if text.isupper() and any(c.isalpha() for c in text):
-            text = text.title()
+        #
+        # # Detect if the text is ALL CAPS and contains at least one letter
+        # if text.isupper() and any(c.isalpha() for c in text):
+        #     text = text.title()
 
         # Preserve bold styling if present in font name
         if "bold" in font.lower():
-            text = f"\\uE000{text}\\uE001"
+            text = f"\\ue000 {text} \\ue001"
 
         new_span = Span()
         new_span.set_text(text)
@@ -318,18 +318,21 @@ class PDFTranslator:
         translated_text = " ".join(line.get_text() for line in paragraph.get_lines())
         self._add_text_with_styling(new_para, translated_text, paragraph)
 
-        self._process_sub_paragraphs(docx_doc, paragraph, section)
+        self._process_sub_paragraphs(docx_doc, paragraph, section, page)
 
-    def _set_paragraph_alignment_and_indent(self, paragraph_obj, paragraph_data, page, section):
+    @staticmethod
+    def _set_paragraph_alignment_and_indent(paragraph_obj, paragraph_data, page, section):
         para_format = paragraph_obj.paragraph_format
         left_indent = int(paragraph_data.get_start()) - int(page.get_min_x())
         right_indent = int(page.max_x) - int(paragraph_data.get_end())
 
         if left_indent != right_indent:
+            # check if the paragraph's starting point is way beyond normal paragraph starting point, if so align it to the right else align it to the left
+
             paragraph_obj.alignment = WD_ALIGN_PARAGRAPH.LEFT
             bbox_x0_in = int(paragraph_data.get_para_bbox().x0) / 72
-            relative_indent_in = (bbox_x0_in - section.left_margin.inches) / 2
-            relative_indent_in = 0 if relative_indent_in < 0.2 else relative_indent_in
+            relative_indent_in = (bbox_x0_in - section.left_margin.inches)
+            relative_indent_in = 0 if int(paragraph_data.get_para_bbox().x0)==int(page.get_min_x()) else relative_indent_in
             para_format.first_line_indent = Inches(relative_indent_in)
         else:
             paragraph_obj.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -355,7 +358,7 @@ class PDFTranslator:
             if span.get("bold"):
                 run.bold = True
 
-    def _process_sub_paragraphs(self, docx_doc, paragraph_data, section):
+    def _process_sub_paragraphs(self, docx_doc, paragraph_data, section, page):
         if not paragraph_data.get_sub_paragraphs():
             return
 
@@ -365,8 +368,8 @@ class PDFTranslator:
 
             new_para.alignment = WD_ALIGN_PARAGRAPH.LEFT
             bbox_x0_in = int(sub_para.get_para_bbox().x0) / 72
-            relative_indent_in = (bbox_x0_in - section.left_margin.inches) / 2
-            relative_indent_in = 0 if relative_indent_in < 0.2 else relative_indent_in
+            relative_indent_in = bbox_x0_in - section.left_margin.inches
+            relative_indent_in = 0 if int(paragraph_data.get_para_bbox().x0)==int(page.get_min_x()) else relative_indent_in
             para_format.first_line_indent = Inches(relative_indent_in)
 
             para_format.line_spacing = Pt(
@@ -521,6 +524,13 @@ class PDFTranslator:
         paragraphs = []
 
         for page in pages:
+            print(
+                f"Page {page.get_page_number()} Dimensions:\n"
+                f"Min X: {page.get_min_x()}\n"
+                f"Max X: {page.get_max_x()}\n"
+                f"Min Y: {page.get_min_y()}\n"
+                f"Max Y: {page.get_max_y()}"
+            )
             page.process_page()
             paragraphs.extend(page.get_paragraphs())
 
@@ -542,7 +552,7 @@ class PDFTranslator:
         docx_doc.save(output_docx_path)
            
             # TODO:
-            # 1. ADD MARKERS FOR NEW LINE
+            # 1. SOME PARAGRAPHS ARE RIGHT ALIGNED, CHECK IF WE CAN HANDLE THAT
             # 2. CHECK OUTPUT FOR MULTIPLE PAGES
             # 3. ADD TABS FOR LINES WITHIN THE SAME PARAGRAPHS, AS SOME TEXTS IN THE SAME PARAGRAPHS ARE EITHER CENTERED OR LEFT ALIGNED OR RIGHT ALIGNED,
             # OR HAVE SOME TABS, SO LOOK INTO HOW I CAN MAINTAIN THE FORMAT IN THE TRANSLATED DOCUMENT

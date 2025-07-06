@@ -15,7 +15,7 @@ class Span:
     def set_text(self, text):
         self.text = text
 
-    def get_text(self):
+    def get_text(self) -> str:
         return self.text
 
     def set_font(self, font):

@@ -106,6 +106,12 @@ class Page:
     def get_max_x(self):
         return self.max_x
 
+    def get_min_y(self):
+        return self.min_y
+
+    def get_max_y(self):
+        return self.max_y
+
     def get_page_number(self):
         return self.number
 
@@ -135,14 +141,14 @@ class Page:
                     lines.append(current_line)
 
                 current_line = Line(page_number=self.get_page_number())
-                current_line.set_text(span.get_text())
+                current_line.set_text(span.get_text().lower())
                 current_line.set_bbox(fitz.Rect(span.get_bbox()))
                 current_line.set_origin(span.get_origin())
                 current_line.set_font_size(span.get_font_size())
                 current_line.set_line_bbox(fitz.Rect(span.get_bbox()))
             else:
                 # Update text
-                current_line.set_text(current_line.get_text() + " " + span.get_text())
+                current_line.set_text(current_line.get_text() + " " + span.get_text().lower())
 
                 # Update bbox
                 curr_bbox = span.get_bbox()
@@ -303,7 +309,7 @@ class Page:
                 continue
 
             if is_punctuation:
-                prev_span.set_text(prev_span.get_text()+span.get_text())
+                prev_span.set_text("{0}{1}".format(prev_span.get_text(), span.get_text()))
                 prev_span.get_bbox().x1 = span.get_bbox().x1
                 continue
 
@@ -311,9 +317,9 @@ class Page:
 
             if span.get_font_size() < prev_span.get_font_size():
                 if x_gap <= 1.0:
-                    prev_span.set_text(prev_span.get_text()+span.get_text())
+                    prev_span.set_text("{0}{1}".format(prev_span.get_text(), span.get_text()))
                 else:
-                    prev_span.set_text(prev_span.get_text()+" "+span.get_text())
+                    prev_span.set_text("{0} {1}".format(prev_span.get_text(), span.get_text()))
                 prev_span.get_bbox().x1 = span.get_bbox().x1
             else:
                 normalized.append(prev_span)
