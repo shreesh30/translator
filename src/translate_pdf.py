@@ -18,6 +18,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont as ReportlabTTFont
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, BitsAndBytesConfig
 
+from src.model.footer import Footer
 from src.model.span import Span
 from src.model.page import Page
 from src.model.paragraph import Paragraph
@@ -196,14 +197,10 @@ class PDFTranslator:
             return {}
 
         font = span["font"]
-        #
-        # # Detect if the text is ALL CAPS and contains at least one letter
-        # if text.isupper() and any(c.isalpha() for c in text):
-        #     text = text.title()
 
         # Preserve bold styling if present in font name
         if "bold" in font.lower():
-            text = f"\\ue000 {text} \\ue001"
+            text = f"[123] {text} [456]"
 
         new_span = Span()
         new_span.set_text(text)
@@ -267,6 +264,11 @@ class PDFTranslator:
                 sub_para.append(self.translate_preserve_styles(para))
             paragraph.set_sub_paragraphs(sub_para)
 
+        if paragraph.get_footer():
+            translated_footer=[]
+            for footer in paragraph.get_footer():
+                translated_text = self.translate_text(footer.get_text(), self.target_language_key)
+                translated_footer.append(Footer(text= translated_text))
 
         return paragraph
 
@@ -327,8 +329,8 @@ class PDFTranslator:
         left_indent = int(paragraph_data.get_start()) - int(page.get_min_x())
         right_indent = int(page.get_max_x()) - int(paragraph_data.get_end())
 
-        if left_indent != right_indent:
-            if int(paragraph_data.get_start())!=int(para_start):
+        if abs(left_indent - right_indent) > 1:
+            if int(paragraph_data.get_start())!=int(para_start) and int(paragraph_data.get_para_bbox().x0)!=page.get_min_x() and int(paragraph_data.get_end())==int(page.get_max_x()):
                 paragraph_obj.alignment = WD_ALIGN_PARAGRAPH.RIGHT
                 para_format.first_line_indent = Inches(0)
             else:
@@ -370,7 +372,7 @@ class PDFTranslator:
             para_format = new_para.paragraph_format
 
 
-            if int(paragraph_data.get_start()) > int(para_start) and int(paragraph_data.get_end())==int(page.get_max_x()):
+            if int(paragraph_data.get_start()) != int(para_start) and int(paragraph_data.get_end())==int(page.get_max_x()) and int(paragraph_data.get_para_bbox().x0)!=page.get_min_x():
                 new_para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
                 para_format.first_line_indent = Inches(0)
             else:
@@ -406,7 +408,7 @@ class PDFTranslator:
         section.right_margin = Inches(1.38)
 
     @staticmethod
-    def create_sub_paragraphs(merged_paragraphs, pages):
+    def create_sub_paragraphs(merged_paragraphs, pages, para_start):
         for paragraph in merged_paragraphs:
             original_lines = paragraph.get_lines()
             new_main_lines = []
@@ -420,11 +422,23 @@ class PDFTranslator:
                 left_indent = int(line.get_line_bbox().x0) - int(page.get_min_x())
                 right_indent = int(page.get_max_x()) - int(line.get_line_bbox().x1)
 
-                is_indented_line = int(line_bbox.x0) != int(min_x)
-                is_prev_line_short = (i > 0 and int(original_lines[i - 1].get_line_bbox().x1) != int(max_x))
-                layout_is_irregular = left_indent != right_indent
+                is_sub_para = False
+                layout_is_centered = abs(left_indent - right_indent) <= 1
 
-                new_sub_para = (is_indented_line or is_prev_line_short) and layout_is_irregular
+                if i > 0 and line.get_font_size() > 9:
+                    # Left-aligned logic
+                    if ((int(line_bbox.x0) == int(para_start) and int(line_bbox.x0) != int(min_x)) or (int(line_bbox.x0) > int(para_start))) and not layout_is_centered:
+                        is_sub_para = True
+
+                    #  Center-aligned logic
+                    elif layout_is_centered and left_indent!=0 and right_indent!=0:
+                        is_sub_para = False
+
+                    #  Right-aligned logic
+                    elif int(line_bbox.x0) != int(para_start) and int(line_bbox.x0) != int(min_x) and int(line_bbox.x1) == int(max_x):
+                        is_sub_para = True
+
+                new_sub_para = is_sub_para
 
                 if i == 0:
                     # Always keep the first line in the main paragraph
@@ -496,9 +510,9 @@ class PDFTranslator:
                 new_para = Paragraph()
                 new_para.set_lines(prev_paragraph.get_lines() + paragraph.get_lines())
                 new_para.set_font_size(prev_paragraph.get_font_size())
-                new_para.set_para_bbox(None)  # Optional: compute merged bbox if needed
-                new_para.set_start(paragraph.get_start())
-                new_para.set_end(prev_paragraph.get_end())
+                new_para.set_para_bbox(fitz.Rect(prev_paragraph.get_para_bbox().x0, prev_paragraph.get_para_bbox().y0,paragraph.get_para_bbox().x1, paragraph.get_para_bbox().y1))
+                new_para.set_start(prev_paragraph.get_start())
+                new_para.set_end(paragraph.get_end())
                 new_para.set_page_number(prev_paragraph.get_page_number())
 
                 # Merge footers correctly
@@ -550,11 +564,7 @@ class PDFTranslator:
         merged_paragraphs = self.merge_paragraphs(paragraphs, pages)
 
         print(f"[INFO] Merged Paragraphs: {merged_paragraphs}")
-        self.create_sub_paragraphs(merged_paragraphs, pages)
 
-        print(f'[INFO] Finalised Paragraphs: {merged_paragraphs}')
-
-        # Assuming `pages` is your list of page objects
         para_start_values = [para.get_start() for para in merged_paragraphs]
 
         # Count occurrences of each start value
@@ -563,10 +573,15 @@ class PDFTranslator:
         # Get the most common start value
         para_start = counter.most_common(1)[0][0]
 
+        self.create_sub_paragraphs(merged_paragraphs, pages, para_start)
+
+        print(f'[INFO] Finalised Paragraphs: {merged_paragraphs}')
+
         for paragraph in merged_paragraphs:
             translated_para = self.translate_preserve_styles(paragraph)
             print(f'Translated Paragraph: {translated_para}')
             self._write_paragraph_to_docx(docx_doc, pages[paragraph.get_page_number()], paragraph, para_start)
+
         file_name = os.path.splitext(os.path.basename(input_folder_path))[0]
         output_docx_path = os.path.join(output_folder_path,"{}.docx".format(file_name + '_' + self.language_config.get_target_language()))
         docx_doc.save(output_docx_path)

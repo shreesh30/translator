@@ -44,10 +44,10 @@ class Page:
         for line in lines:
             left_indent = int(line.get_bbox().x0) - int(self.get_min_x())
             right_indent = int(self.get_max_x()) - int(line.get_bbox().x1)
-            if left_indent==right_indent:
-                paragraph_centered = True
-            else:
+            if abs(left_indent - right_indent) > 1:
                 paragraph_centered = False
+            else:
+                paragraph_centered = True
 
 
         x0 = lines[0].get_bbox().x0
@@ -168,8 +168,8 @@ class Page:
                 updated_bbox = fitz.Rect(
                     current_line.get_bbox().x0,
                     current_line.get_bbox().y0,
-                    max(current_line.get_bbox().x1, curr_bbox.x1),
-                    max(current_line.get_bbox().y1, curr_bbox.y1),
+                     curr_bbox.x1,
+                     curr_bbox.y1,
                 )
                 current_line.set_bbox(updated_bbox)
                 current_line.set_line_bbox(updated_bbox)
