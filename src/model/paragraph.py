@@ -32,6 +32,9 @@ class Paragraph:
     def add_footers(self, footer):
         self.footer.append(footer)
 
+    def set_footers(self,footers):
+        self.footer = footers
+
     def set_start(self, start):
         self.start = start
 

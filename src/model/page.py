@@ -26,6 +26,7 @@ class Page:
     max_y:float = field(default_factory=float)
     content_width:float = field(default_factory=float)
     content_height:float = field(default_factory=float)
+    target_language: str = field(default_factory=str)
 
     def _get_footer_line_y(self):
         """Returns the Y position of a full-width horizontal line if detected."""
@@ -260,12 +261,17 @@ class Page:
             line_text = line.get_text()
 
             if '*' in line_text:
+                pattern = r'(?i)\benglish(?=\s+translation\s+of)'
+                line_text = re.sub(pattern, self.target_language, line_text)
+
                 footer = Footer()
                 footer.set_text(line_text)
+                footer.set_font_size(line.get_font_size())
                 new_footers.append(footer)
             elif line_text.isdigit():
                 footer = Footer()
                 footer.set_text(line_text)
+                footer.set_font_size(line.get_font_size())
                 new_footers.append(footer)
                 footer = None
             else:

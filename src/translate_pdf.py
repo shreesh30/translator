@@ -8,8 +8,9 @@ import fitz
 import torch
 from IndicTransToolkit.processor import IndicProcessor
 from docx import Document
+from docx.enum.section import WD_SECTION
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.shared import Inches, Pt
+from docx.shared import Inches, Pt, RGBColor
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 from fitz import Rect
@@ -46,6 +47,7 @@ class PDFTranslator:
         self.model = self.initialize_model(self.CKPT_DIR)
 
         self.language_config = lang_config
+        self.target_language = self.language_config.get_target_language()
         self.target_language_key = self.language_config.get_target_language_key()
         self.source_language = self.language_config.get_source_language()
         self.source_language_key = self.language_config.get_source_language_key()
@@ -219,7 +221,7 @@ class PDFTranslator:
         for page in doc:
             blocks = page.get_text("dict", sort=True)["blocks"]
             page_num = page.number
-            pg = Page(number=page_num)
+            pg = Page(number=page_num, target_language= self.target_language)
             pg.add_drawings(page.get_cdrawings())
             min_x, max_x, min_y, max_y = self.get_content_dimensions(blocks)
             pg.set_content_dimensions(min_x, max_x, min_y, max_y)
@@ -269,7 +271,7 @@ class PDFTranslator:
             for footer in paragraph.get_footer():
                 translated_text = self.translate_text(footer.get_text(), self.target_language_key)
                 translated_footer.append(Footer(text= translated_text))
-
+            paragraph.set_footers(translated_footer)
         return paragraph
 
     @staticmethod
@@ -310,8 +312,8 @@ class PDFTranslator:
         flush_buffer()
         return spans
 
-    def _write_paragraph_to_docx(self, docx_doc, page, paragraph, para_start):
-        section = docx_doc.sections[0]
+    def build_document(self, docx_doc, page, paragraph, para_start):
+        section = docx_doc.sections[-1]
         new_para = docx_doc.add_paragraph()
         self.set_rtl(new_para)
 
@@ -320,6 +322,9 @@ class PDFTranslator:
 
         translated_text = " ".join(line.get_text() for line in paragraph.get_lines())
         self._add_text_with_styling(new_para, translated_text, paragraph)
+
+        if paragraph.get_footer():
+            self._add_footer(docx_doc, paragraph.get_footer())
 
         self._process_sub_paragraphs(docx_doc, paragraph, section, page, para_start)
 
@@ -369,8 +374,9 @@ class PDFTranslator:
 
         for sub_para in paragraph_data.get_sub_paragraphs():
             new_para = docx_doc.add_paragraph()
-            para_format = new_para.paragraph_format
+            self.set_rtl(new_para)
 
+            para_format = new_para.paragraph_format
 
             if int(paragraph_data.get_start()) != int(para_start) and int(paragraph_data.get_end())==int(page.get_max_x()) and int(paragraph_data.get_para_bbox().x0)!=page.get_min_x():
                 new_para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
@@ -393,9 +399,12 @@ class PDFTranslator:
             translated_text = " ".join(line.get_text() for line in sub_para.get_lines())
             self._add_text_with_styling(new_para, translated_text, paragraph_data)
 
+            if sub_para.get_footer():
+                self._add_footer(docx_doc,sub_para.get_footer())
+
     @staticmethod
     def _configure_docx_section(docx_doc):
-        section = docx_doc.sections[0]
+        section = docx_doc.sections[-1]
 
         # Set A4 size (default, but making it explicit)
         section.page_height = Inches(11.69)  # 297 mm
@@ -407,12 +416,12 @@ class PDFTranslator:
         section.left_margin = Inches(1.38)  # (210 - 140)/2 mm
         section.right_margin = Inches(1.38)
 
-    @staticmethod
-    def create_sub_paragraphs(merged_paragraphs, pages, para_start):
+    def create_sub_paragraphs(self, merged_paragraphs, pages, para_start):
         for paragraph in merged_paragraphs:
             original_lines = paragraph.get_lines()
             new_main_lines = []
             i = 0
+
             while i < len(original_lines):
                 line = original_lines[i]
                 page = pages[line.get_page_number()]
@@ -481,7 +490,6 @@ class PDFTranslator:
 
                         i += 1
                 else:
-                    # Not indented → part of main paragraph
                     new_main_lines.append(line)
                     i += 1
 
@@ -541,6 +549,57 @@ class PDFTranslator:
             bidi.set(qn('w:val'), '1')  # Enable RTL
             pPr.append(bidi)
 
+    @staticmethod
+    def add_horizontal_line(paragraph):
+        """Adds a proper horizontal line using paragraph border"""
+        p_pr = paragraph._p.get_or_add_pPr()
+
+        # Create border element if it doesn't exist
+        p_bdr = OxmlElement('w:pBdr')
+        p_pr.append(p_bdr)
+
+        # Create bottom border with specifications - now using black color
+        bottom_border = OxmlElement('w:bottom')
+        bottom_border.set(qn('w:val'), 'single')  # Line style
+        bottom_border.set(qn('w:sz'), '6')  # Line width (8ths of a point)
+        bottom_border.set(qn('w:space'), '0')  # Space above line
+        bottom_border.set(qn('w:color'), '000000')  # Black color
+
+        p_bdr.append(bottom_border)
+
+    # TODO: FIX THE FOOTER FUNCTION, IT IS ADDING FOOTER TO ALL THE PAGES
+    def _add_footer(self,docx_doc, para_footers: List[Footer]):
+        """Adds footer ONLY to the current section's next page"""
+        # 1. Get current section (always use last section)
+        section = docx_doc.sections[-1]
+        footer = section.footer
+
+        # 2. CRITICAL: Disable footer inheritance
+        footer.is_linked_to_previous = False
+
+        # 3. Add footer content
+        line_para = footer.add_paragraph()
+        line_para.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        line_para.paragraph_format.left_indent = Pt(0)
+        line_para.paragraph_format.right_indent = Pt(0)
+        # TODO: EVERYTIME WE ARE ADDING THE FOOTER WE ARE ADDING A LINE, CHECK IF THE SECTION THAT I AM ADDING
+        # THE FOOTER TO HAS A LINE OR NOT, IF IT DOES NOT ONLY THEN ADD THE LINE
+        self.add_horizontal_line(line_para)
+
+        for para_footer in para_footers:
+            footer_para = footer.add_paragraph()
+            footer_para.alignment = WD_ALIGN_PARAGRAPH.LEFT
+            footer_format = footer_para.paragraph_format
+            footer_format.space_before = Pt(0)
+            footer_format.space_after = Pt(0)
+            run = footer_para.add_run(para_footer.get_text())
+            run.font.size = Pt(para_footer.get_font_size() * self.language_config.get_font_multiplier())
+
+        # 5. Ensure content stays with footer
+        if docx_doc.paragraphs:  # If paragraphs exist
+            docx_doc.paragraphs[-1].paragraph_format.keep_with_next = True
+
+
     def process_pdf(self, input_folder_path: str,output_folder_path: str):
         # 1. Extract text with styling
         pages = self.extract_pages(input_folder_path)
@@ -549,7 +608,7 @@ class PDFTranslator:
         self._configure_docx_section(docx_doc)
 
         paragraphs = []
-
+        starting_page_number = 0
         for page in pages:
             print(
                 f"Page {page.get_page_number()} Dimensions:\n"
@@ -560,6 +619,7 @@ class PDFTranslator:
             )
             page.process_page()
             paragraphs.extend(page.get_paragraphs())
+
         # merge paragraphs
         merged_paragraphs = self.merge_paragraphs(paragraphs, pages)
 
@@ -580,18 +640,20 @@ class PDFTranslator:
         for paragraph in merged_paragraphs:
             translated_para = self.translate_preserve_styles(paragraph)
             print(f'Translated Paragraph: {translated_para}')
-            self._write_paragraph_to_docx(docx_doc, pages[paragraph.get_page_number()], paragraph, para_start)
+            self.build_document(docx_doc, pages[paragraph.get_page_number()], paragraph, para_start)
 
         file_name = os.path.splitext(os.path.basename(input_folder_path))[0]
         output_docx_path = os.path.join(output_folder_path,"{}.docx".format(file_name + '_' + self.language_config.get_target_language()))
         docx_doc.save(output_docx_path)
 
             # TODO:
+            # THE FOOTERS CAN BE ADDED WHERE I AM CURRENTLY ADDING THEM, THE PAGE NUMBERS SHOULD BE CENTER ALIGNED AT THE BOTTOM FOR ALL PAGES
             # 1. ADD TRANSLATED FOOTERS TO THE BOTTOM OF THE PAGE WHEREVER THE PARAGRAPH EXISTS
             # 2. HANDLE TABLES
             # 3. ADD TRANSLATED HEADERS TO THE TOP OF THE PAGE
             # 4. HANDLE HEADERS AND FOOTERS DIFFERENTLY
             # 5. MANAGE FORMAT BETTER
+            # 6. FOR THE CONTENTS TABLE, JUST TRANSLATE THE CONTENTS, LEAVE THE PAGE NUMBERS BLANK
 
         '''Texts like below are appearing as separate paragraphs
                 1. The Hon’ble Sri C. Rajagopalachariar.
