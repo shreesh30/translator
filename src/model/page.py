@@ -392,16 +392,23 @@ class Page:
 
     def map_footers_to_paragraphs(self):
         footer_index = 0
+        total_footers = len(self.footers)
 
         for paragraph in self.paragraphs:
+            if not self.footers:
+                return  # No footers to map
+
             for line in paragraph.get_lines():
                 if '*' in line.get_text():
-                    if footer_index < len(self.footers):
-                        paragraph.add_footers(self.footers[footer_index])
-                        footer_index += 1
+                    if total_footers > 1:
+                        if footer_index < total_footers:
+                            paragraph.add_footers(self.footers[footer_index])
+                            footer_index += 1
+                        else:
+                            print(
+                                f"[WARN] Not enough footers to attach to paragraph on page {paragraph.get_page_number()}")
                     else:
-                        # Optional: handle the case where there are more lines with '*' than footers
-                        print(f"[WARN] Not enough footers to attach to paragraph on page {paragraph.get_page_number()}")
+                        paragraph.add_footers(self.footers[0])
 
     def process_page(self):
         self.normalize_spans()

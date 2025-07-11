@@ -6,7 +6,7 @@ class LanguageConfig:
     target_language: str
     target_language_key: str
     target_font_path: str
-    font_multiplier: float
+    font_size_multiplier: float
     line_spacing_multiplier: float
     source_language: str = None
     source_language_key: str = None
@@ -21,8 +21,8 @@ class LanguageConfig:
     def get_target_font_path(self):
         return self.target_font_path
 
-    def get_font_multiplier(self):
-        return self.font_multiplier
+    def get_font_size_multiplier(self):
+        return self.font_size_multiplier
 
     def get_line_spacing_multiplier(self):
         return self.line_spacing_multiplier
