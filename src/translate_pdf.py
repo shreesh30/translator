@@ -40,7 +40,7 @@ class PDFTranslator:
     STANDARDIZED_BOTTOM_MARGIN = Inches(1.38)
     STANDARDIZED_LEFT_MARGIN = Inches(1.38)
     STANDARDIZED_RIGHT_MARGIN = Inches(1.38)
-    STANDARDIZED_FOOTER_DISTANCE = Inches(2.1)
+    STANDARDIZED_FOOTER_DISTANCE = Inches(1)
 
     USABLE_PAGE_HEIGHT = (STANDARDIZED_PAGE_HEIGHT.inches- STANDARDIZED_TOP_MARGIN.inches- STANDARDIZED_BOTTOM_MARGIN.inches)  # in inches
     USABLE_PAGE_WIDTH = (STANDARDIZED_PAGE_WIDTH.inches - STANDARDIZED_LEFT_MARGIN.inches - STANDARDIZED_RIGHT_MARGIN.inches)
@@ -359,7 +359,7 @@ class PDFTranslator:
 
             # Check if we need to create a new section (page) or paragraph
             if space_used > self.USABLE_PAGE_HEIGHT:
-                print('[INFO] CREATING NEW SECTION')
+                print('[INFO] Creating New Section')
                 # If this is the last para in the section, remove space after for it before creating a new section
                 if docx_doc.paragraphs:
                     current_para_format = docx_doc.paragraphs[-1].paragraph_format
@@ -378,7 +378,7 @@ class PDFTranslator:
 
             # Create new paragraph if needed (first line or line doesn't fit in current para)
             if current_para is None:
-                print('[INFO] CREATING NEW PARAGRAPH')
+                print('[INFO] Creating New Paragraph')
                 current_para = docx_doc.add_paragraph()
                 self.set_rtl(current_para)
                 self._set_paragraph_alignment_and_indent(current_para, paragraph, page, para_start, docx_doc.sections[-1])
@@ -390,9 +390,7 @@ class PDFTranslator:
 
             # Add the line to current paragraph
             self._add_text_with_styling(current_para, line, paragraph)
-            print(f'[INFO] PAGE_USED BEFORE UPDATE {self.PAGE_USED}')
             self.PAGE_USED += line_height/72
-            print(f'[INFO] PAGE_USED AFTER UPDATE {self.PAGE_USED}')
 
         if has_footer and not footer_added:
             self._add_footer(docx_doc.sections[-1], paragraph.get_footer())
@@ -629,7 +627,7 @@ class PDFTranslator:
         p_pr.append(p_bdr)
 
         # Create bottom border with specifications - now using black color
-        bottom_border = OxmlElement('w:bottom')
+        bottom_border = OxmlElement('w:top')
         bottom_border.set(qn('w:val'), 'single')  # Line style
         bottom_border.set(qn('w:sz'), '6')  # Line width (6ths of a point)
         bottom_border.set(qn('w:space'), '0')  # Space above line
@@ -642,12 +640,9 @@ class PDFTranslator:
         """
         Removes surrounding angle brackets like <...> but keeps inner content.
         """
-        print(f"Original: {repr(text)}")
-
         # Remove one layer of angle brackets if the entire string is wrapped in them
         cleaned = re.sub(r'^<\s*(.*?)\s*>$', r'\1', text)
 
-        print(f"After tag removal: {repr(cleaned)}")
         return cleaned.strip()
 
     @staticmethod
@@ -760,7 +755,7 @@ class PDFTranslator:
                 footer_para = footer.add_paragraph()
                 footer_para.alignment = WD_ALIGN_PARAGRAPH.LEFT  # Or whatever alignment is desired
                 footer_format = footer_para.paragraph_format
-                footer_format.space_before = Pt(para_footer.get_font_size()* self.language_config.get_font_size_multiplier())
+                footer_format.space_before = Pt(0)
                 footer_format.space_after = Pt(0)
                 footer_format.line_spacing = Pt(para_footer.get_font_size() * self.language_config.get_font_size_multiplier() *self.language_config.get_line_spacing_multiplier())
                 run = footer_para.add_run(para_footer.get_text())
