@@ -267,7 +267,7 @@ class Page:
         for line in footers:
             line_text = line.get_text()
 
-            if '*' in line_text:
+            if self.has_non_english_prefix(line_text):
                 pattern = r'(?i)\benglish(?=\s+translation\s+of)'
                 line_text = re.sub(pattern, self.target_language, line_text)
 
@@ -398,30 +398,43 @@ class Page:
             line.set_text(text)
 
     def map_footers_to_paragraphs(self):
-        footer_index = 0
-        total_footers = len(self.footers) if self.footers else 0
-
-        if total_footers == 0:
+        if not self.footers:
             return  # No footers to map
 
-        for paragraph in self.paragraphs:
-            if footer_index >= total_footers:
-                break  # All footers have been assigned
+        for footer in self.footers:
+            footer_text = footer.get_text()
+            normalized_prefix = self.extract_prefix(footer_text).strip().lower()
 
-            for line in paragraph.get_lines():
-                if '*' in line.get_text():
-                    if total_footers>1:
-                        paragraph.add_footers(self.footers[footer_index])
-                        footer_index += 1
-                    # This handles the case if there is only 1 footer and that is shared by multiple paragraphs
-                    else:
-                        paragraph.add_footers(self.footers[footer_index])
+            for paragraph in self.paragraphs:
+                if self._footer_already_mapped(paragraph, footer_text):
+                    continue
+
+                for line in paragraph.get_lines():
+                    normalized_line = line.get_text().strip().lower()
+                    if normalized_prefix in normalized_line:
+                        paragraph.add_footers(footer)
+                        break  # Avoid mapping the same footer multiple times to one paragraph
+
+    @staticmethod
+    def _footer_already_mapped(paragraph, footer_text: str) -> bool:
+        """Check if a footer is already mapped to a paragraph."""
+        return footer_text in (f.get_text() for f in paragraph.get_footer())
+
 
     def extract_page_number(self):
         for footer in self.footers:
             footer_text = footer.get_text()
             if footer_text.isdigit():
                 self.set_extracted_page_number(footer_text)
+
+    @staticmethod
+    def extract_prefix(text):
+        match = re.match(r'^[^A-Za-z]+', text)
+        return match.group(0) if match else ''
+
+    def has_non_english_prefix(self,text):
+        prefix = self.extract_prefix(text)
+        return bool(re.search(r'[^A-Za-z\s]', prefix))
 
 
     def process_page(self):

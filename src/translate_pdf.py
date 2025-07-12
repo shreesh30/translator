@@ -810,8 +810,7 @@ class PDFTranslator:
                 footer_page_number_start = page.get_page_number()
 
             if page.get_headers():
-                print(f"Header======================= {page.get_headers()}")
-
+                pass
 
         # header_start_page = extracted_page_number+1
         header_page_number_start = footer_page_number_start+1
