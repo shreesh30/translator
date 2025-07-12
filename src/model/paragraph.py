@@ -11,7 +11,7 @@ from src.model.line import Line
 
 @dataclass
 class Paragraph:
-    page_number:int = field(default_factory=int, repr=False)
+    page_number:int = field(default_factory=int)
     lines: List[Line] = field(default_factory=list)
     footer: List[Footer] = field(default_factory=list)
     font_size: float = field(default_factory=float)

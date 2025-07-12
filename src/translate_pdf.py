@@ -763,6 +763,23 @@ class PDFTranslator:
                 run.font.name = self.font_name  # Ensure font consistency
                 run._element.rPr.rFonts.set(qn('w:eastAsia'), self.font_name)  # For East Asian fonts
 
+    def _add_header(self, section, header):
+        pass
+
+    def _add_page_number(self,section, page_number):
+        """Adds footer ONLY to the current section's next page"""
+        # 1. Get current section (always use last section)
+        section.footer_distance = self.STANDARDIZED_FOOTER_DISTANCE
+        footer = section.first_page_footer
+        footer.is_linked_to_previous = False
+
+        footer_para = footer.add_paragraph()
+        footer_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        footer_format = footer_para.paragraph_format
+        footer_format.space_before = Pt(2.5)
+        run = footer_para.add_run(str(page_number))
+        run.font.name = self.font_name  # Ensure font consistency
+        run._element.rPr.rFonts.set(qn('w:eastAsia'), self.font_name)  # For East Asian fonts
 
     def process_pdf(self, input_folder_path: str,output_folder_path: str):
         # 1. Extract text with styling
@@ -773,7 +790,9 @@ class PDFTranslator:
         self._configure_docx_section(section)
 
         paragraphs = []
-        starting_page_number = 0
+        extracted_page_number = None
+        footer_page_number_start = 0
+
         for page in pages:
             print(
                 f"Page {page.get_page_number()} Dimensions:\n"
@@ -784,6 +803,18 @@ class PDFTranslator:
             )
             page.process_page()
             paragraphs.extend(page.get_paragraphs())
+            print(f'[INFO] Page: {page}')
+
+            if page.get_extracted_page_number() and extracted_page_number is None:
+                extracted_page_number = int(page.get_extracted_page_number())
+                footer_page_number_start = page.get_page_number()
+
+            if page.get_headers():
+                print(f"Header======================= {page.get_headers()}")
+
+
+        # header_start_page = extracted_page_number+1
+        header_page_number_start = footer_page_number_start+1
 
         # merge paragraphs
         merged_paragraphs = self.merge_paragraphs(paragraphs, pages)
@@ -806,6 +837,17 @@ class PDFTranslator:
             translated_para = self.translate_preserve_styles(paragraph)
             print(f'Translated Paragraph: {translated_para}')
             self.build_document(docx_doc, pages[paragraph.get_page_number()], translated_para, para_start)
+
+
+        for idx,section in enumerate(docx_doc.sections):
+            if idx >= footer_page_number_start:
+                self._add_page_number(section, extracted_page_number)
+                extracted_page_number+=1
+
+            if idx>= header_page_number_start:
+                header = None
+                self._add_header(section , header)
+                header_page_number_start+=1
 
         print(f'[INFO] Total Sections: {len(docx_doc.sections)}')
 

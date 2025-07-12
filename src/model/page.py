@@ -26,7 +26,8 @@ class Page:
     max_y:float = field(default_factory=float)
     content_width:float = field(default_factory=float)
     content_height:float = field(default_factory=float)
-    target_language: str = field(default_factory=str)
+    target_language: str = field(default_factory=str, repr=False)
+    extracted_page_number: str = field(default_factory=str)
 
     def _get_footer_line_y(self):
         """Returns the Y position of a full-width horizontal line if detected."""
@@ -98,6 +99,12 @@ class Page:
         self.set_max_x(max_x)
         self.set_min_y(min_y)
         self.set_max_y(max_y)
+
+    def set_extracted_page_number(self, extracted_page_number):
+        self.extracted_page_number = extracted_page_number
+
+    def get_extracted_page_number(self):
+        return self.extracted_page_number
 
     def get_paragraphs(self):
         return self.paragraphs
@@ -410,6 +417,13 @@ class Page:
                     else:
                         paragraph.add_footers(self.footers[footer_index])
 
+    def extract_page_number(self):
+        for footer in self.footers:
+            footer_text = footer.get_text()
+            if footer_text.isdigit():
+                self.set_extracted_page_number(footer_text)
+
+
     def process_page(self):
         self.normalize_spans()
         self.group_by_lines()
@@ -418,6 +432,4 @@ class Page:
         self.group_by_paragraphs()
         self.compute_content_dimensions()
         self.map_footers_to_paragraphs()
-
-
-
+        self.extract_page_number()
