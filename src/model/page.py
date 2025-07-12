@@ -200,7 +200,7 @@ class Page:
             is_new_para = (
                     i > 0 and (
                     line.get_page_number() != self.lines[i - 1].get_page_number() or
-                    int(line.get_line_bbox().y0) - int(self.lines[i-1].get_line_bbox().y1)>0
+                    int(line.get_line_bbox().y0) - int(self.lines[i-1].get_line_bbox().y1)>=0
             )
             )
 
@@ -392,23 +392,23 @@ class Page:
 
     def map_footers_to_paragraphs(self):
         footer_index = 0
-        total_footers = len(self.footers)
+        total_footers = len(self.footers) if self.footers else 0
+
+        if total_footers == 0:
+            return  # No footers to map
 
         for paragraph in self.paragraphs:
-            if not self.footers:
-                return  # No footers to map
+            if footer_index >= total_footers:
+                break  # All footers have been assigned
 
             for line in paragraph.get_lines():
                 if '*' in line.get_text():
-                    if total_footers > 1:
-                        if footer_index < total_footers:
-                            paragraph.add_footers(self.footers[footer_index])
-                            footer_index += 1
-                        else:
-                            print(
-                                f"[WARN] Not enough footers to attach to paragraph on page {paragraph.get_page_number()}")
+                    if total_footers>1:
+                        paragraph.add_footers(self.footers[footer_index])
+                        footer_index += 1
+                    # This handles the case if there is only 1 footer and that is shared by multiple paragraphs
                     else:
-                        paragraph.add_footers(self.footers[0])
+                        paragraph.add_footers(self.footers[footer_index])
 
     def process_page(self):
         self.normalize_spans()

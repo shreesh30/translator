@@ -37,9 +37,10 @@ class PDFTranslator:
     STANDARDIZED_PAGE_HEIGHT =Inches(11.69)
     STANDARDIZED_PAGE_WIDTH = Inches(8.27)
     STANDARDIZED_TOP_MARGIN = Inches(1.48)
-    STANDARDIZED_BOTTOM_MARGIN = Inches(1.48)
+    STANDARDIZED_BOTTOM_MARGIN = Inches(1.38)
     STANDARDIZED_LEFT_MARGIN = Inches(1.38)
     STANDARDIZED_RIGHT_MARGIN = Inches(1.38)
+    STANDARDIZED_FOOTER_DISTANCE = Inches(2.1)
 
     USABLE_PAGE_HEIGHT = (STANDARDIZED_PAGE_HEIGHT.inches- STANDARDIZED_TOP_MARGIN.inches- STANDARDIZED_BOTTOM_MARGIN.inches)  # in inches
     USABLE_PAGE_WIDTH = (STANDARDIZED_PAGE_WIDTH.inches - STANDARDIZED_LEFT_MARGIN.inches - STANDARDIZED_RIGHT_MARGIN.inches)
@@ -345,8 +346,6 @@ class PDFTranslator:
         current_para = None
 
         has_footer = bool(paragraph.get_footer())
-        current_section = docx_doc.sections[-1]
-
         # Flag to track if footer for current paragraph has been added to a section
         footer_added = False
 
@@ -361,15 +360,19 @@ class PDFTranslator:
             # Check if we need to create a new section (page) or paragraph
             if space_used > self.USABLE_PAGE_HEIGHT:
                 print('[INFO] CREATING NEW SECTION')
+                # If this is the last para in the section, remove space after for it before creating a new section
+                if docx_doc.paragraphs:
+                    current_para_format = docx_doc.paragraphs[-1].paragraph_format
+                    current_para_format.space_after = Pt(0)
+
                 # If footer is pending for current paragraph, attach to current_section BEFORE making a new one
                 if has_footer and not footer_added:
-                    self._add_footer(current_section, paragraph.get_footer())
+                    self._add_footer(docx_doc.sections[-1], paragraph.get_footer())
                     footer_added = True
 
                 # Create new section (page)
                 docx_doc.add_section(WD_SECTION.NEW_PAGE)
                 self._configure_docx_section(docx_doc.sections[-1])
-                current_section = docx_doc.sections[-1]  # Update pointer
                 self.PAGE_USED = 0
                 current_para = None  # Force new paragraph on new page
 
@@ -382,7 +385,7 @@ class PDFTranslator:
                 self._set_paragraph_spacing(current_para, paragraph)
 
                 if has_footer and not footer_added:
-                    self._add_footer(current_section, paragraph.get_footer())
+                    self._add_footer(docx_doc.sections[-1], paragraph.get_footer())
                     footer_added =True
 
             # Add the line to current paragraph
@@ -392,7 +395,7 @@ class PDFTranslator:
             print(f'[INFO] PAGE_USED AFTER UPDATE {self.PAGE_USED}')
 
         if has_footer and not footer_added:
-            self._add_footer(current_section, paragraph.get_footer())
+            self._add_footer(docx_doc.sections[-1], paragraph.get_footer())
 
 
         self.PAGE_USED += ((paragraph.get_font_size() * 0.5) / 72) # Adding to incorporate "Space After" after a paragraph
@@ -457,17 +460,14 @@ class PDFTranslator:
         section.left_margin = self.STANDARDIZED_LEFT_MARGIN
         section.right_margin = self.STANDARDIZED_RIGHT_MARGIN
 
-        section.different_first_page_header_footer = False
+        section.different_first_page_header_footer = True
         section.footer.is_linked_to_previous = False
         section.header.is_linked_to_previous = False
-
-        self._universal_clear_footer(section.footer)
-        self._universal_clear_footer(section.header)
 
         return section
 
     @staticmethod
-    def _universal_clear_footer(element):
+    def _universal_clear_element(element):
         """Works with any python-docx version"""
         try:
             # Try modern clear() method first
@@ -475,10 +475,6 @@ class PDFTranslator:
         except AttributeError:
             # Fallback for older versions
             element._element.clear()  # Nuclear option - removes all XML content
-
-        # Ensure at least one empty paragraph exists
-        if not element.paragraphs:
-            element.add_paragraph()
 
     @staticmethod
     def _clear_section_footer_content(section):
@@ -635,7 +631,7 @@ class PDFTranslator:
         # Create bottom border with specifications - now using black color
         bottom_border = OxmlElement('w:bottom')
         bottom_border.set(qn('w:val'), 'single')  # Line style
-        bottom_border.set(qn('w:sz'), '6')  # Line width (8ths of a point)
+        bottom_border.set(qn('w:sz'), '6')  # Line width (6ths of a point)
         bottom_border.set(qn('w:space'), '0')  # Space above line
         bottom_border.set(qn('w:color'), '000000')  # Black color
 
@@ -740,31 +736,33 @@ class PDFTranslator:
                 return True
         return False
 
-    # TODO: FIX THE FOOTER FUNCTION, IT IS ADDING FOOTER TO ALL THE PAGES
     def _add_footer(self,section, para_footers: List[Footer]):
         """Adds footer ONLY to the current section's next page"""
         # 1. Get current section (always use last section)
-        footer = section.footer
+        section.footer_distance = self.STANDARDIZED_FOOTER_DISTANCE
+        footer = section.first_page_footer
         footer.is_linked_to_previous = False
 
-        self._universal_clear_footer(footer)
-
-        # 3. Add horizontal line only if this is the FIRST footer paragraph
-        # if not any(p.text.strip() for p in footer.paragraphs):
-        #     line_para = footer.add_paragraph()
-        #     line_para.alignment = WD_ALIGN_PARAGRAPH.LEFT
-        #     line_para.paragraph_format.left_indent = Pt(0)
-        #     line_para.paragraph_format.right_indent = Pt(0)
-        #     self.add_horizontal_line(line_para)
-
         for para_footer in para_footers:
+            # 2. Add horizontal line only if this is the FIRST footer paragraph
+            if not any(p.text.strip() for p in footer.paragraphs):
+                line_para = footer.add_paragraph()
+                self.add_horizontal_line(line_para)
+                line_para.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                line_para_format = line_para.paragraph_format
+                line_para_format.left_indent = Pt(0)
+                line_para_format.right_indent = Pt(0)
+                line_para_format.space_before = Pt(0)
+                line_para_format.space_after = Pt(0)
+                line_para_format.line_spacing = Pt(0)
+
             if para_footer.get_text().strip():  # Only add if there's actual text
                 footer_para = footer.add_paragraph()
                 footer_para.alignment = WD_ALIGN_PARAGRAPH.LEFT  # Or whatever alignment is desired
                 footer_format = footer_para.paragraph_format
-                footer_format.space_before = Pt(0)
+                footer_format.space_before = Pt(para_footer.get_font_size()* self.language_config.get_font_size_multiplier())
                 footer_format.space_after = Pt(0)
-                footer_format.line_spacing = Pt(para_footer.get_font_size() *self.language_config.get_font_size_multiplier() *self.language_config.get_line_spacing_multiplier())
+                footer_format.line_spacing = Pt(para_footer.get_font_size() * self.language_config.get_font_size_multiplier() *self.language_config.get_line_spacing_multiplier())
                 run = footer_para.add_run(para_footer.get_text())
                 run.font.size = Pt(para_footer.get_font_size() * self.language_config.get_font_size_multiplier())
                 run.font.name = self.font_name  # Ensure font consistency
