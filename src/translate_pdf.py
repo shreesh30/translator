@@ -20,8 +20,8 @@ from src.model.language_config import LanguageConfig
 from src.model.line import Line
 from src.model.page import Page
 from src.model.span import Span
-from src.processor.document_builder import DocumentBuilder
-from src.processor.document_processor import DocumentProcessor
+from src.service.document_builder import DocumentBuilder
+from src.service.document_processor import DocumentProcessor
 from src.utils.utils import Utils
 
 
@@ -391,10 +391,6 @@ class PDFTranslator:
 
         document_processor = DocumentProcessor(pages)
         document_processor.process_document()
-        # header_start_page = extracted_page_number+1
-        # header_page_number_start = footer_page_number_start+1
-
-        # self._add_chapter(merged_paragraphs, drawings)
 
         paragraphs = document_processor.get_paragraphs()
         print(f'[INFO] Paragraphs: {paragraphs}')
@@ -416,8 +412,6 @@ class PDFTranslator:
         docx_doc.save(output_docx_path)
 
             # TODO:
-            # THE FOOTERS CAN BE ADDED WHERE I AM CURRENTLY ADDING THEM, THE PAGE NUMBERS SHOULD BE CENTER ALIGNED AT THE BOTTOM FOR ALL PAGES
-            # 1. ADD TRANSLATED FOOTERS TO THE BOTTOM OF THE PAGE WHEREVER THE PARAGRAPH EXISTS
             # 2. HANDLE TABLES
             # 3. ADD TRANSLATED HEADERS TO THE TOP OF THE PAGE
             # 4. HANDLE HEADERS AND FOOTERS DIFFERENTLY

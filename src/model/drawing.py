@@ -19,3 +19,4 @@ class Drawing:
 
     def get_bbox(self):
         return self.bbox
+

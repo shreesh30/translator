@@ -1,10 +1,9 @@
-from collections import Counter
-from dataclasses import dataclass, field
+import re
+from collections import Counter, defaultdict
 from typing import List
 
 import fitz
 
-# from model.paragraph import Paragraph
 from src.model.page import Page
 from src.model.paragraph import Paragraph
 
@@ -178,15 +177,103 @@ class DocumentProcessor:
 
     def get_page_number_info(self):
         extracted_page_number = None
-        footer_page_number_start = None
+        page_number_start = None
 
         for page in self.pages:
             if page.get_extracted_page_number() and extracted_page_number is None:
                 extracted_page_number = int(page.get_extracted_page_number())
-                footer_page_number_start = page.get_page_number()
+                page_number_start = page.get_page_number()
                 break
 
-        return extracted_page_number, footer_page_number_start
+        return extracted_page_number, page_number_start
+
+    @staticmethod
+    def _is_footer_drawing(drawing, page):
+        """Determines if a drawing is a full-width footer line."""
+        bbox = drawing.get_bbox()
+        left_indent = int(bbox.x0) - int(page.get_min_x())
+        right_indent = int(page.get_max_x()) - int(bbox.x1)
+        return left_indent == 0 and right_indent == 0
+
+    def is_centered(self, paragraph, page_number):
+        page = self.pages[page_number]
+        left_indent = int(paragraph.get_para_bbox().x0) - int(page.get_min_x())
+        right_indent = int(page.get_max_x()) - int(paragraph.get_para_bbox().x1)
+
+        return abs(left_indent - right_indent) <= 1 and left_indent != 0 and right_indent != 0
+
+    def _get_non_footer_drawings(self):
+        """Returns a list of non-footer drawings from all pages."""
+        non_footer_drawings = []
+
+        for page in self.pages:
+            for drawing in page.drawings:
+                if not self._is_footer_drawing(drawing, page):
+                    non_footer_drawings.append(drawing)
+
+        return non_footer_drawings
+
+    @staticmethod
+    def extract_volume_name(headers):
+        for header in headers:
+            # Remove leading page number (e.g., '686 ')
+            cleaned = re.sub(r'^\d+\s*', '', header).strip().lower()
+            # Check if the cleaned header starts with the known title
+            if cleaned.startswith("constituent assembly of india"):
+                return cleaned
+        return None
+
+    def add_volume(self):
+        headers = [header.get_text() for page in self.pages for header in page.get_headers()]
+        volume_name = self.extract_volume_name(headers)
+
+        for paragraph in self.paragraphs:
+            paragraph.set_volume(volume_name)
+
+    def add_chapters(self):
+        drawings = self._get_non_footer_drawings()
+        page_to_paragraphs = self._group_paragraphs_by_page()
+        chapter_names = self._extract_chapter_names(drawings, page_to_paragraphs)
+
+        if chapter_names:
+            self._assign_chapters_to_paragraphs(chapter_names)
+
+    def _group_paragraphs_by_page(self):
+        """Groups paragraphs by their page number."""
+        page_dict = defaultdict(list)
+        for paragraph in self.paragraphs:
+            page_number = paragraph.get_page_number()
+            page_dict[page_number].append(paragraph)
+        return page_dict
+
+    def _extract_chapter_names(self, drawings, page_dict):
+        """Extracts chapter names that appear immediately after drawing elements."""
+        chapters = []
+        for drawing in drawings:
+            page_number = drawing.get_page_number()
+            bbox = drawing.get_bbox()
+            paragraphs = page_dict.get(page_number, [])
+
+            for paragraph in paragraphs:
+                if paragraph.get_para_bbox().y0 >= bbox.y1:
+                    if self.is_centered(paragraph, page_number):
+                        chapter_text = " ".join(line.get_text() for line in paragraph.get_lines())
+                        chapters.append(chapter_text)
+                    break  # Only check the first paragraph below the drawing
+        return chapters
+
+    def _assign_chapters_to_paragraphs(self, chapter_names):
+        """Assigns the appropriate chapter name to each paragraph and its sub-paragraphs."""
+        current_chapter = None
+        for paragraph in self.paragraphs:
+            para_text = " ".join(line.get_text() for line in paragraph.get_lines())
+            if para_text in chapter_names:
+                current_chapter = para_text
+
+            paragraph.set_chapter(current_chapter)
+            for sub_para in paragraph.get_sub_paragraphs():
+                sub_para.set_chapter(current_chapter)
+
 
     def process_document(self):
         print('[INFO] Processing Document')
@@ -204,3 +291,5 @@ class DocumentProcessor:
         if self.paragraphs:
             self.merge_paragraphs()
             self.create_sub_paragraphs()
+            self.add_chapters()
+            self.add_volume()

@@ -12,8 +12,7 @@ from docx.shared import Inches, Pt
 from src.model.footer import Footer
 from src.model.language_config import LanguageConfig
 from src.model.paragraph import Paragraph
-from src.processor.document_processor import DocumentProcessor
-
+from src.service.document_processor import DocumentProcessor
 
 class DocumentBuilder:
     # PAGE DIMENSIONS
@@ -40,8 +39,7 @@ class DocumentBuilder:
 
     def build_document(self, paragraphs: List[Paragraph]):
         self.add_paragraphs(paragraphs)
-        extracted_page_number, footer_page_number_start = self.document_processor.get_page_number_info()
-        self.add_page_numbers(footer_page_number_start, extracted_page_number)
+        self.add_page_numbers()
 
     def add_paragraphs(self, paragraphs: List[Paragraph]):
         pages = self.document_processor.get_pages()
@@ -311,8 +309,9 @@ class DocumentBuilder:
         run.font.name = self.font_name  # Ensure font consistency
         run._element.rPr.rFonts.set(qn('w:eastAsia'), self.font_name)  # For East Asian fonts
 
-    def add_page_numbers(self, footer_page_number_start, extracted_page_number):
+    def add_page_numbers(self):
+        extracted_page_number, page_number_start = self.document_processor.get_page_number_info()
         for idx, section in enumerate(self.document.sections):
-            if idx >= footer_page_number_start:
+            if idx >= page_number_start:
                 self._add_page_number(section, extracted_page_number)
                 extracted_page_number += 1

@@ -20,6 +20,7 @@ class Paragraph:
     end: float = field(default_factory=float)
     sub_paragraphs: List[Paragraph] = field(default_factory=list)
     chapter: str = field(default_factory=str)
+    volume: str = field(default_factory=str)
 
     def set_lines(self, lines):
         self.lines = lines
@@ -51,6 +52,9 @@ class Paragraph:
     def set_chapter(self, chapter):
         self.chapter = chapter
 
+    def set_volume(self, volume):
+        self.volume = volume
+
     def add_sub_paragraph(self,  sub_paragraph):
         self.sub_paragraphs.append(sub_paragraph)
 
@@ -80,3 +84,6 @@ class Paragraph:
 
     def get_chapter(self):
         return self.chapter
+
+    def get_volume(self):
+        return self.volume
