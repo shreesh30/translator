@@ -2,6 +2,7 @@ import fitz
 import re
 import string
 
+from src.model.drawing import Drawing
 from src.model.span import Span
 from src.model.header import Header
 from src.model.footer import Footer
@@ -19,7 +20,7 @@ class Page:
     paragraphs: List[Paragraph] = field(default_factory=list)
     headers: List[Header] = field(default_factory=list)
     footers: List[Footer] = field(default_factory=list)
-    drawings: List[Dict] = field(default_factory=list, repr=False)
+    drawings: List[Drawing] = field(default_factory=list)
     min_x: float = field(default_factory=float)
     max_x:float = field(default_factory=float)
     min_y:float = field(default_factory=float)
@@ -32,13 +33,13 @@ class Page:
     def _get_footer_line_y(self):
         """Returns the Y position of a full-width horizontal line if detected."""
         for drawing in self.drawings:
-            rect = fitz.Rect(drawing['rect'])
+            bbox = drawing.get_bbox()
             if (
-                    int(rect.x0) == int(self.min_x) and
-                    int(rect.x1) == int(self.max_x) and
-                    int(rect.y0) == int(rect.y1)
+                    int(bbox.x0) == int(self.min_x) and
+                    int(bbox.x1) == int(self.max_x) and
+                    int(bbox.y0) == int(bbox.y1)
             ):
-                return rect.y1
+                return bbox.y1
         return None
 
     def _build_paragraph(self, lines):
@@ -135,6 +136,9 @@ class Page:
 
     def get_page_number(self):
         return self.number
+
+    def get_drawings(self):
+        return self.drawings
 
     def compute_content_dimensions(self):
         self.content_width = self.max_x - self.min_x
@@ -405,6 +409,9 @@ class Page:
             footer_text = footer.get_text()
             normalized_prefix = self.extract_prefix(footer_text).strip().lower()
 
+            if footer_text.isdigit():
+                continue
+
             for paragraph in self.paragraphs:
                 if self._footer_already_mapped(paragraph, footer_text):
                     continue
@@ -429,13 +436,12 @@ class Page:
 
     @staticmethod
     def extract_prefix(text):
-        match = re.match(r'^[^A-Za-z]+', text)
+        match = re.match(r'^[^\w\s]+', text)  # match non-alphanumeric, non-space characters
         return match.group(0) if match else ''
 
     def has_non_english_prefix(self,text):
         prefix = self.extract_prefix(text)
         return bool(re.search(r'[^A-Za-z\s]', prefix))
-
 
     def process_page(self):
         self.normalize_spans()

@@ -19,6 +19,7 @@ class Paragraph:
     start: float = field(default_factory=float)
     end: float = field(default_factory=float)
     sub_paragraphs: List[Paragraph] = field(default_factory=list)
+    chapter: str = field(default_factory=str)
 
     def set_lines(self, lines):
         self.lines = lines
@@ -47,6 +48,9 @@ class Paragraph:
     def set_sub_paragraphs(self, sub_paragraphs):
         self.sub_paragraphs = sub_paragraphs
 
+    def set_chapter(self, chapter):
+        self.chapter = chapter
+
     def add_sub_paragraph(self,  sub_paragraph):
         self.sub_paragraphs.append(sub_paragraph)
 
@@ -73,3 +77,6 @@ class Paragraph:
 
     def get_sub_paragraphs(self):
         return self.sub_paragraphs
+
+    def get_chapter(self):
+        return self.chapter

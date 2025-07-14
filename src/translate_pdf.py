@@ -1,30 +1,27 @@
 import os
 import re
 import sys
-from collections import Counter
-from typing import Tuple, List, Dict
+from typing import Tuple, List
 
 import fitz
 import torch
 from IndicTransToolkit.processor import IndicProcessor
 from PIL import ImageFont
 from docx import Document
-from docx.enum.section import WD_SECTION
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
-from docx.shared import Inches, Pt
+from docx.shared import Inches
 from fontTools.ttLib import TTFont as FontToolsTTFont
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont as ReportlabTTFont
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, BitsAndBytesConfig
 
+from src.model.drawing import Drawing
 from src.model.footer import Footer
 from src.model.language_config import LanguageConfig
 from src.model.line import Line
 from src.model.page import Page
-from src.model.paragraph import Paragraph
 from src.model.span import Span
+from src.processor.document_builder import DocumentBuilder
+from src.processor.document_processor import DocumentProcessor
 from src.utils.utils import Utils
 
 
@@ -63,6 +60,7 @@ class PDFTranslator:
         self.source_language_key = self.language_config.get_source_language_key()
 
         self.font_name = self.load_and_register_font(self.language_config.get_target_font_path())
+        self.language_config.set_target_font_name(self.font_name)
 
     @staticmethod
     def load_and_register_font(font_path):
@@ -134,7 +132,7 @@ class PDFTranslator:
                 output = self.model.generate(
                     **inputs,
                     min_length=0,
-                    max_length=512,
+                    max_length=1024,
                     num_beams=6,
                     length_penalty=1.0,
                     early_stopping=True,
@@ -145,6 +143,7 @@ class PDFTranslator:
                 )
 
                 print(f"[DEBUG] Generated Token IDs: {output}")
+
             with self.tokenizer.as_target_tokenizer():
                 decoded = self.tokenizer.batch_decode(
                     output.detach().cpu().tolist(),
@@ -158,9 +157,6 @@ class PDFTranslator:
             print(f"[DEBUG] Postprocessed Translations: {final}")
             print(f"[DEBUG] Translated: {final[0]}")
 
-            # Define tag replacements
-
-
             # Apply replacements
             for old, new in Utils.tag_map.items():
                 final[0] = final[0].replace(old, new)
@@ -170,6 +166,7 @@ class PDFTranslator:
         except Exception as e:
             print(f"[ERROR] Translation failed: {e}")
             return ""
+
 
     @staticmethod
     def get_content_dimensions(blocks: List[dict]) -> Tuple[float, float, float, float]:
@@ -232,7 +229,9 @@ class PDFTranslator:
             blocks = page.get_text("dict", sort=True)["blocks"]
             page_num = page.number
             pg = Page(number=page_num, target_language= self.target_language)
-            pg.add_drawings(page.get_cdrawings())
+            for drawing in page.get_drawings():
+                bbox = fitz.Rect(drawing.get('rect'))
+                pg.add_drawings([Drawing(bbox=bbox, page_number=page_num)])
             min_x, max_x, min_y, max_y = self.get_content_dimensions(blocks)
             pg.set_content_dimensions(min_x, max_x, min_y, max_y)
 
@@ -248,21 +247,20 @@ class PDFTranslator:
 
         return pages
 
-    def translate_preserve_styles(self,paragraph):
+    def translate_preserve_styles(self,paragraph, document_processor):
         # 1. Apply invisible style markers
         text = " ".join(line.get_text() for line in paragraph.get_lines())
 
-        # Translate with context
         translated_text = self.translate_text(text, self.target_language_key)
 
         print(f'[INFO] Translated Text: {translated_text}')
 
-        lines = self.split_into_lines(translated_text, paragraph.get_font_size())
+        lines = self.split_into_lines(translated_text, paragraph, document_processor)
 
         new_lines=[]
         for line in lines:
             new_line = self.convert_tags_to_angle_brackets(line)
-            line_bbox = self.get_line_bbox(line, paragraph.get_font_size())
+            line_bbox = self.get_line_bbox(new_line, paragraph.get_font_size())
             new_lines.append(Line(page_number=paragraph.get_page_number(),
                                   text=new_line,
                                   line_bbox= line_bbox,
@@ -274,7 +272,7 @@ class PDFTranslator:
         if paragraph.get_sub_paragraphs():
             sub_para = []
             for para in paragraph.get_sub_paragraphs():
-                sub_para.append(self.translate_preserve_styles(para))
+                sub_para.append(self.translate_preserve_styles(para, document_processor))
             paragraph.set_sub_paragraphs(sub_para)
 
         if paragraph.get_footer():
@@ -285,355 +283,8 @@ class PDFTranslator:
             paragraph.set_footers(translated_footer)
         return paragraph
 
-    @staticmethod
-    def parse_styled_spans(text)->List[Dict]:
-        """
-        Parses text and marks any content inside angle brackets <...> as bold.
-        Returns a list of spans: [{"text": ..., "bold": True/False}]
-        """
-        spans = []
-        pattern = re.compile(r'<(.*?)>')
-
-        last_index = 0
-
-        for match in pattern.finditer(text):
-            start, end = match.span()
-
-            # Add normal text before the tag
-            if start > last_index:
-                normal_text = text[last_index:start].strip()
-                if normal_text:
-                    spans.append({"text": normal_text, "bold": False})
-
-            # Add bold text inside angle brackets
-            bold_text = match.group(1).strip()
-            if bold_text:
-                spans.append({"text": bold_text, "bold": True})
-
-            last_index = end
-
-        # Add any remaining text after the last tag
-        if last_index < len(text):
-            tail = text[last_index:].strip()
-            if tail:
-                spans.append({"text": tail, "bold": False})
-
-        return spans
-
-    @staticmethod
-    def clear_footer(section):
-        """Completely eradicates all footer content and settings"""
-        # Clear primary footer
-        footer = section.footer
-        for elem in list(footer._element):
-            footer._element.remove(elem)
-
-        # Clear first page footer if exists
-        if hasattr(section, 'first_page_footer'):
-            first_footer = section.first_page_footer
-            for elem in list(first_footer._element):
-                first_footer._element.remove(elem)
-
-        # Clear even page footer if exists
-        if hasattr(section, 'even_page_footer'):
-            even_footer = section.even_page_footer
-            for elem in list(even_footer._element):
-                even_footer._element.remove(elem)
-
-
-    def build_document(self, docx_doc, page, paragraph, para_start):
-        lines = [line.get_text() for line in paragraph.get_lines()]
-        current_para = None
-
-        has_footer = bool(paragraph.get_footer())
-        # Flag to track if footer for current paragraph has been added to a section
-        footer_added = False
-
-        for i,line in enumerate(lines):
-            # Calculate height of current line
-            line_height = self.estimate_line_height(line, paragraph)
-            line_spacing = self.language_config.get_line_spacing_multiplier()* self.language_config.get_font_size_multiplier()*paragraph.get_font_size()
-
-            final_line_height = (line_height+line_spacing)/72 if i!=len(lines)-1 else line_height/72
-            space_used = self.PAGE_USED + final_line_height
-
-            # Check if we need to create a new section (page) or paragraph
-            if space_used > self.USABLE_PAGE_HEIGHT:
-                print('[INFO] Creating New Section')
-                # If this is the last para in the section, remove space after for it before creating a new section
-                if docx_doc.paragraphs:
-                    current_para_format = docx_doc.paragraphs[-1].paragraph_format
-                    current_para_format.space_after = Pt(0)
-
-                # If footer is pending for current paragraph, attach to current_section BEFORE making a new one
-                if has_footer and not footer_added:
-                    self._add_footer(docx_doc.sections[-1], paragraph.get_footer())
-                    footer_added = True
-
-                # Create new section (page)
-                docx_doc.add_section(WD_SECTION.NEW_PAGE)
-                self._configure_docx_section(docx_doc.sections[-1])
-                self.PAGE_USED = 0
-                current_para = None  # Force new paragraph on new page
-
-            # Create new paragraph if needed (first line or line doesn't fit in current para)
-            if current_para is None:
-                print('[INFO] Creating New Paragraph')
-                current_para = docx_doc.add_paragraph()
-                self.set_rtl(current_para)
-                self._set_paragraph_alignment_and_indent(current_para, paragraph, page, para_start, docx_doc.sections[-1])
-                self._set_paragraph_spacing(current_para, paragraph)
-
-                if has_footer and not footer_added:
-                    self._add_footer(docx_doc.sections[-1], paragraph.get_footer())
-                    footer_added =True
-
-            # Add the line to current paragraph
-            self._add_text_with_styling(current_para, line, paragraph)
-            self.PAGE_USED += line_height/72
-
-        if has_footer and not footer_added:
-            self._add_footer(docx_doc.sections[-1], paragraph.get_footer())
-
-
-        self.PAGE_USED += ((paragraph.get_font_size() * 0.5) / 72) # Adding to incorporate "Space After" after a paragraph
-
-        # Process sub-paragraphs
-        if paragraph.get_sub_paragraphs():
-            for para in paragraph.get_sub_paragraphs():
-                self.build_document(docx_doc, page, para, para_start)
-
-    @staticmethod
-    def _set_paragraph_alignment_and_indent(paragraph_obj, paragraph_data, page, para_start, section, continue_para=False):
-        para_format = paragraph_obj.paragraph_format
-        left_indent = int(paragraph_data.get_start()) - int(page.get_min_x())
-        right_indent = int(page.get_max_x()) - int(paragraph_data.get_end())
-
-        if abs(left_indent - right_indent) > 0:
-            if int(paragraph_data.get_start())!=int(para_start) and int(paragraph_data.get_para_bbox().x0)!=page.get_min_x() and int(paragraph_data.get_end())==int(page.get_max_x()):
-                paragraph_obj.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-                para_format.first_line_indent = Inches(0)
-            else:
-                paragraph_obj.alignment = WD_ALIGN_PARAGRAPH.LEFT
-                relative_indent_in=0
-                if not continue_para:
-                    bbox_x0_in = int(paragraph_data.get_para_bbox().x0) / 72
-                    relative_indent_in = (bbox_x0_in - section.left_margin.inches)
-                    if int(paragraph_data.get_para_bbox().x0)==int(page.get_min_x()):
-                        relative_indent_in = 0
-                    elif int(paragraph_data.get_para_bbox().x0)==int(para_start):
-                        relative_indent_in=relative_indent_in/2
-                para_format.first_line_indent = Inches(relative_indent_in)
-        else:
-            paragraph_obj.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            para_format.first_line_indent = Pt(0)
-
-    def _set_paragraph_spacing(self, paragraph_obj, paragraph_data):
-        para_format = paragraph_obj.paragraph_format
-        para_format.space_after = Pt(paragraph_data.get_font_size() * 0.5)
-        para_format.line_spacing = Pt(
-            paragraph_data.get_font_size() *
-            self.language_config.get_font_size_multiplier() *
-            self.language_config.get_line_spacing_multiplier()
-        )
-        para_format.space_before = Pt(0)
-
-    def _add_text_with_styling(self, paragraph_obj, text, paragraph_data):
-        spans = self.parse_styled_spans(text)
-        for span in spans:
-            run = paragraph_obj.add_run(span["text"] + " ")
-            run.font.size = Pt(paragraph_data.get_font_size() * self.language_config.get_font_size_multiplier())
-            run.font.name = self.font_name
-            run._element.rPr.rFonts.set(qn('w:eastAsia'), self.font_name)
-            if span.get("bold"):
-                run.bold = True
-
-
-    def _configure_docx_section(self,section):
-        # Set standard page dimensions and margins
-        section.page_height = self.STANDARDIZED_PAGE_HEIGHT
-        section.page_width = self.STANDARDIZED_PAGE_WIDTH
-        section.top_margin = self.STANDARDIZED_TOP_MARGIN
-        section.bottom_margin = self.STANDARDIZED_BOTTOM_MARGIN
-        section.left_margin = self.STANDARDIZED_LEFT_MARGIN
-        section.right_margin = self.STANDARDIZED_RIGHT_MARGIN
-
-        section.different_first_page_header_footer = True
-        section.footer.is_linked_to_previous = False
-        section.header.is_linked_to_previous = False
-
-        return section
-
-    @staticmethod
-    def _universal_clear_element(element):
-        """Works with any python-docx version"""
-        try:
-            # Try modern clear() method first
-            element.clear()
-        except AttributeError:
-            # Fallback for older versions
-            element._element.clear()  # Nuclear option - removes all XML content
-
-    @staticmethod
-    def _clear_section_footer_content(section):
-        footer = section.footer  # Get the specific footer object for this section
-        for elem in list(footer._element):  # Iterate over a copy to allow modification
-            footer._element.remove(elem)
-        # Word requires at least one paragraph in a header/footer part
-        if not footer.paragraphs:
-            footer.add_paragraph()
-
-    @staticmethod
-    def create_sub_paragraphs(merged_paragraphs, pages, para_start):
-        for paragraph in merged_paragraphs:
-            original_lines = paragraph.get_lines()
-            new_main_lines = []
-            i = 0
-
-            while i < len(original_lines):
-                line = original_lines[i]
-                page = pages[line.get_page_number()]
-                min_x = page.get_min_x()
-                max_x = page.get_max_x()
-                line_bbox = line.get_line_bbox()
-                left_indent = int(line.get_line_bbox().x0) - int(page.get_min_x())
-                right_indent = int(page.get_max_x()) - int(line.get_line_bbox().x1)
-
-                is_sub_para = False
-                layout_is_centered = abs(left_indent - right_indent) <= 1
-
-                if i > 0 and line.get_font_size() > 9:
-                    # Left-aligned logic
-                    if ((int(line_bbox.x0) == int(para_start) and int(line_bbox.x0) != int(min_x)) or (int(line_bbox.x0) > int(para_start))) and not layout_is_centered:
-                        is_sub_para = True
-
-                    #  Center-aligned logic
-                    elif layout_is_centered and left_indent!=0 and right_indent!=0:
-                        is_sub_para = False
-
-                    #  Right-aligned logic
-                    elif int(line_bbox.x0) != int(para_start) and int(line_bbox.x0) != int(min_x) and int(line_bbox.x1) == int(max_x):
-                        is_sub_para = True
-
-                new_sub_para = is_sub_para
-
-                if i == 0:
-                    # Always keep the first line in the main paragraph
-                    new_main_lines.append(line)
-                    i += 1
-                    continue
-
-                if new_sub_para:
-                    # Start new sub-paragraph
-                    sub_paragraph = Paragraph(
-                        page_number=line.get_page_number(),
-                        lines=[line],
-                        font_size=line.get_font_size(),
-                        para_bbox=line_bbox,
-                        start=line_bbox.x0,
-                        end=line_bbox.x1
-                    )
-                    paragraph.add_sub_paragraph(sub_paragraph)
-                    # Remove this line from main paragraph
-                    i += 1
-
-                    # Add following non-indented lines to this sub-paragraph
-                    while i < len(original_lines):
-                        next_line = original_lines[i]
-                        next_bbox = next_line.get_line_bbox()
-                        next_min_x = pages[next_line.get_page_number()].get_min_x()
-
-                        next_is_indented = int(next_bbox.x0) != int(next_min_x)
-
-                        if next_is_indented:
-                            # Start of a new sub-paragraph → break
-                            break
-
-                        # Add to current sub-paragraph
-                        sub_paragraph.get_lines().append(next_line)
-                        bbox = sub_paragraph.get_para_bbox()
-                        bbox.y1 = max(bbox.y1, next_bbox.y1)
-                        bbox.x1 = max(bbox.x1, next_bbox.x1)
-                        sub_paragraph.set_end(bbox.x1)
-
-                        i += 1
-                else:
-                    new_main_lines.append(line)
-                    i += 1
-
-            # Set only top-level lines to the paragraph
-            paragraph.set_lines(new_main_lines)
-
-    @staticmethod
-    def merge_paragraphs(paragraphs, pages):
-        merged_paragraphs = []
-        prev_paragraph = None
-
-        for paragraph in paragraphs:
-            curr_page_num = paragraph.get_page_number()
-            curr_bbox = paragraph.get_para_bbox()
-            curr_start_x = int(curr_bbox.x0) if curr_bbox else None
-            page_min_x = int(pages[curr_page_num].get_min_x())
-
-            is_merge_case = (
-                    prev_paragraph is not None and
-                    prev_paragraph.get_page_number() != curr_page_num and
-                    curr_start_x == page_min_x
-            )
-
-            if is_merge_case:
-                # Merge prev and current paragraph
-                new_para = Paragraph()
-                new_para.set_lines(prev_paragraph.get_lines() + paragraph.get_lines())
-                new_para.set_font_size(prev_paragraph.get_font_size())
-                new_para.set_para_bbox(fitz.Rect(prev_paragraph.get_para_bbox().x0, prev_paragraph.get_para_bbox().y0,paragraph.get_para_bbox().x1, paragraph.get_para_bbox().y1))
-                new_para.set_start(prev_paragraph.get_start())
-                new_para.set_end(paragraph.get_end())
-                new_para.set_page_number(prev_paragraph.get_page_number())
-
-                # Merge footers correctly
-                combined_footers = prev_paragraph.get_footer() + paragraph.get_footer()
-                for footer in combined_footers:
-                    new_para.add_footers(footer)
-
-                merged_paragraphs.append(new_para)
-                prev_paragraph = None
-            else:
-                if prev_paragraph:
-                    merged_paragraphs.append(prev_paragraph)
-                prev_paragraph = paragraph
-
-        if prev_paragraph:
-            merged_paragraphs.append(prev_paragraph)
-
-        return merged_paragraphs
-
-    def set_rtl(self, paragraph):
-        if self.language_config.get_right_to_left():
-            """Set the paragraph to Right-to-Left (RTL) direction."""
-            p = paragraph._p  # Access the XML <w:p> element
-            pPr = p.get_or_add_pPr()
-            bidi = OxmlElement('w:bidi')
-            bidi.set(qn('w:val'), '1')  # Enable RTL
-            pPr.append(bidi)
-
-    @staticmethod
-    def add_horizontal_line(paragraph):
-        """Adds a proper horizontal line using paragraph border"""
-        p_pr = paragraph._p.get_or_add_pPr()
-
-        # Create border element if it doesn't exist
-        p_bdr = OxmlElement('w:pBdr')
-        p_pr.append(p_bdr)
-
-        # Create bottom border with specifications - now using black color
-        bottom_border = OxmlElement('w:top')
-        bottom_border.set(qn('w:val'), 'single')  # Line style
-        bottom_border.set(qn('w:sz'), '6')  # Line width (6ths of a point)
-        bottom_border.set(qn('w:space'), '0')  # Space above line
-        bottom_border.set(qn('w:color'), '000000')  # Black color
-
-        p_bdr.append(bottom_border)
+    def _add_chapter(self, paragraphs, drawings):
+        pass
 
     @staticmethod
     def remove_angle_brackets(text: str) -> str:
@@ -652,62 +303,63 @@ class PDFTranslator:
 
         return text.strip()
 
-    def estimate_line_height(self,line, paragraph_data):
-        # DIFF
-        font_size_pt = paragraph_data.get_font_size() * self.language_config.get_font_size_multiplier()
+    @staticmethod
+    def is_tag(word: str) -> bool:
+        return re.fullmatch(r'</?\w+>', word.strip()) is not None
 
-        # Load font
-        font = ImageFont.truetype(self.language_config.get_target_font_path(), size=font_size_pt)
-
-        line_copy = str(line)
-        self.remove_angle_brackets(line_copy)
-
-        bbox = font.getbbox(line_copy)
-        line_height = bbox[3] - bbox[1]
-        return line_height
-
-    def split_into_lines(self, para_text, font_size):
+    def split_into_lines(self, para_text, paragraph, document_processor):
         """Splits text into lines using accurate point/inch measurements"""
+        font_size = paragraph.get_font_size()
+
         # 1. Get font metrics in points
         font_size_pt = font_size * self.language_config.get_font_size_multiplier()
 
         font = ImageFont.truetype(self.language_config.get_target_font_path(), size=font_size_pt)
 
-            # 2. Calculate max width IN POINTS (1 inch = 72 points)
+        # 2. Calculate max width IN POINTS (1 inch = 72 points)
         max_width_pt = self.USABLE_PAGE_WIDTH * 72
 
-            # 3. Language-aware splitting
-        return self._split_words(para_text, font, max_width_pt)
+        # 3. Language-aware splitting
+        return self._split_words(para_text, font, max_width_pt, paragraph, document_processor)
 
-    @staticmethod
-    def _split_words(text, font, max_width_pt):
-        """Splits space-separated languages using accurate width measurements"""
+    def _split_words(self ,text, font, max_width_pt, paragraph, document_processor):
+        """Splits space-separated languages using accurate width measurements."""
         words = text.split()
         lines = []
         current_line = []
-        current_width = 0  # in points
+        current_width = 0
 
-        space_width = font.getlength(" ")  # Get space width in font units
+        space_width = font.getlength(" ")
+        tab_width = 4 * space_width
 
-        for word in words:
-            word_width = font.getlength(word)
+        para_indent = (
+            tab_width if int(paragraph.get_para_bbox().x0) == document_processor.get_paragraph_start()
+            else 0
+        )
 
-            # Check if word fits (including space if not first word)
-            if current_line:
-                total_width = current_width + space_width + word_width
-            else:
-                total_width = word_width
+        applied_indent = False
 
-            if total_width > max_width_pt:
-                if current_line:  # Only break if we have content
-                    lines.append(" ".join(current_line))
+        for i, word in enumerate(words):
+            bbox = font.getbbox(word)
+            word_width = bbox[2]-bbox[0]
+            additional_space = space_width if current_line else 0
+            projected_width = current_width + additional_space + word_width
+
+            if self.is_tag(word):
+                current_line.append(word)
+                continue
+
+            if not applied_indent:
+                projected_width=projected_width - word_width + para_indent #Subtract space width and add the tabs width
+                applied_indent = True
+
+            if projected_width > max_width_pt:
+                lines.append(" ".join(current_line))
                 current_line = [word]
                 current_width = word_width
             else:
-                if current_line:
-                    current_width += space_width
                 current_line.append(word)
-                current_width += word_width
+                current_width = projected_width
 
         if current_line:
             lines.append(" ".join(current_line))
@@ -731,122 +383,31 @@ class PDFTranslator:
                 return True
         return False
 
-    def _add_footer(self,section, para_footers: List[Footer]):
-        """Adds footer ONLY to the current section's next page"""
-        # 1. Get current section (always use last section)
-        section.footer_distance = self.STANDARDIZED_FOOTER_DISTANCE
-        footer = section.first_page_footer
-        footer.is_linked_to_previous = False
-
-        for para_footer in para_footers:
-            # 2. Add horizontal line only if this is the FIRST footer paragraph
-            if not any(p.text.strip() for p in footer.paragraphs):
-                line_para = footer.add_paragraph()
-                self.add_horizontal_line(line_para)
-                line_para.alignment = WD_ALIGN_PARAGRAPH.LEFT
-                line_para_format = line_para.paragraph_format
-                line_para_format.left_indent = Pt(0)
-                line_para_format.right_indent = Pt(0)
-                line_para_format.space_before = Pt(0)
-                line_para_format.space_after = Pt(0)
-                line_para_format.line_spacing = Pt(0)
-
-            if para_footer.get_text().strip():  # Only add if there's actual text
-                footer_para = footer.add_paragraph()
-                footer_para.alignment = WD_ALIGN_PARAGRAPH.LEFT  # Or whatever alignment is desired
-                footer_format = footer_para.paragraph_format
-                footer_format.space_before = Pt(0)
-                footer_format.space_after = Pt(0)
-                footer_format.line_spacing = Pt(para_footer.get_font_size() * self.language_config.get_font_size_multiplier() *self.language_config.get_line_spacing_multiplier())
-                run = footer_para.add_run(para_footer.get_text())
-                run.font.size = Pt(para_footer.get_font_size() * self.language_config.get_font_size_multiplier())
-                run.font.name = self.font_name  # Ensure font consistency
-                run._element.rPr.rFonts.set(qn('w:eastAsia'), self.font_name)  # For East Asian fonts
-
-    def _add_header(self, section, header):
-        pass
-
-    def _add_page_number(self,section, page_number):
-        """Adds footer ONLY to the current section's next page"""
-        # 1. Get current section (always use last section)
-        section.footer_distance = self.STANDARDIZED_FOOTER_DISTANCE
-        footer = section.first_page_footer
-        footer.is_linked_to_previous = False
-
-        footer_para = footer.add_paragraph()
-        footer_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        footer_format = footer_para.paragraph_format
-        footer_format.space_before = Pt(2.5)
-        run = footer_para.add_run(str(page_number))
-        run.font.name = self.font_name  # Ensure font consistency
-        run._element.rPr.rFonts.set(qn('w:eastAsia'), self.font_name)  # For East Asian fonts
-
     def process_pdf(self, input_folder_path: str,output_folder_path: str):
         # 1. Extract text with styling
         pages = self.extract_pages(input_folder_path)
 
         docx_doc = Document()
-        section = docx_doc.sections[-1]
-        self._configure_docx_section(section)
 
-        paragraphs = []
-        extracted_page_number = None
-        footer_page_number_start = 0
-
-        for page in pages:
-            print(
-                f"Page {page.get_page_number()} Dimensions:\n"
-                f"Min X: {page.get_min_x()}\n"
-                f"Max X: {page.get_max_x()}\n"
-                f"Min Y: {page.get_min_y()}\n"
-                f"Max Y: {page.get_max_y()}"
-            )
-            page.process_page()
-            paragraphs.extend(page.get_paragraphs())
-            print(f'[INFO] Page: {page}')
-
-            if page.get_extracted_page_number() and extracted_page_number is None:
-                extracted_page_number = int(page.get_extracted_page_number())
-                footer_page_number_start = page.get_page_number()
-
-            if page.get_headers():
-                pass
-
+        document_processor = DocumentProcessor(pages)
+        document_processor.process_document()
         # header_start_page = extracted_page_number+1
-        header_page_number_start = footer_page_number_start+1
+        # header_page_number_start = footer_page_number_start+1
 
-        # merge paragraphs
-        merged_paragraphs = self.merge_paragraphs(paragraphs, pages)
+        # self._add_chapter(merged_paragraphs, drawings)
 
-        print(f"[INFO] Merged Paragraphs: {merged_paragraphs}")
+        paragraphs = document_processor.get_paragraphs()
+        print(f'[INFO] Paragraphs: {paragraphs}')
 
-        para_start_values = [para.get_start() for para in merged_paragraphs]
+        document_builder = DocumentBuilder(document=docx_doc ,language_config= self.language_config, document_processor=document_processor)
 
-        # Count occurrences of each start value
-        counter = Counter(para_start_values)
-
-        # Get the most common start value
-        para_start = counter.most_common(1)[0][0]
-
-        self.create_sub_paragraphs(merged_paragraphs, pages, para_start)
-
-        print(f'[INFO] Finalised Paragraphs: {merged_paragraphs}')
-
-        for paragraph in merged_paragraphs:
-            translated_para = self.translate_preserve_styles(paragraph)
+        translated_paragraphs = []
+        for paragraph in paragraphs:
+            translated_para = self.translate_preserve_styles(paragraph, document_processor)
             print(f'Translated Paragraph: {translated_para}')
-            self.build_document(docx_doc, pages[paragraph.get_page_number()], translated_para, para_start)
+            translated_paragraphs.append(translated_para)
 
-
-        for idx,section in enumerate(docx_doc.sections):
-            if idx >= footer_page_number_start:
-                self._add_page_number(section, extracted_page_number)
-                extracted_page_number+=1
-
-            if idx>= header_page_number_start:
-                header = None
-                self._add_header(section , header)
-                header_page_number_start+=1
+        document_builder.build_document(paragraphs)
 
         print(f'[INFO] Total Sections: {len(docx_doc.sections)}')
 
