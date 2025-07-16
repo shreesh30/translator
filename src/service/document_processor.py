@@ -1,16 +1,20 @@
 import re
 from collections import Counter, defaultdict
-from typing import List
+from typing import List, Tuple
 
 import fitz
 
+from src.model.drawing import Drawing
 from src.model.page import Page
 from src.model.paragraph import Paragraph
+from src.model.span import Span
 
 
 class DocumentProcessor:
-    def __init__(self, pages: List[Page]):
-        self.pages = pages
+    def __init__(self, input_folder_path, language_config):
+        self.input_folder_path = input_folder_path
+        self.language_config = language_config
+        self.pages = None
         self.paragraphs = None
 
     def set_paragraphs(self, paragraphs):
@@ -268,15 +272,97 @@ class DocumentProcessor:
         for paragraph in self.paragraphs:
             para_text = " ".join(line.get_text() for line in paragraph.get_lines())
             if para_text in chapter_names:
-                current_chapter = para_text
+                current_chapter = para_text.strip()
 
-            paragraph.set_chapter(current_chapter)
-            for sub_para in paragraph.get_sub_paragraphs():
-                sub_para.set_chapter(current_chapter)
+            if current_chapter:
+                paragraph.set_chapter(current_chapter)
+                for sub_para in paragraph.get_sub_paragraphs():
+                    sub_para.set_chapter(current_chapter)
+
+    @staticmethod
+    def _parse_span(span: dict, page_num: int):
+        """
+        Parses a span and returns cleaned span information.
+        Converts ALL-UPPERCASE spans to Title Case (e.g., 'PREFACE' -> 'Preface', 'SIR B.N. RAU' -> 'Sir B.N. Rau').
+        """
+        text = span["text"].strip()
+        if not text:
+            return {}
+
+        font = span["font"]
+
+        # Preserve bold styling if present in font name
+        if "bold" in font.lower():
+            text = f"[123] {text} [456]"
+
+        new_span = Span()
+        new_span.set_text(text)
+        new_span.set_font(font)
+        new_span.set_font_size(span["size"])
+        new_span.set_page_num(page_num)
+        new_span.set_origin(span["origin"])
+        new_span.set_bbox(fitz.Rect(span["bbox"]))
+
+        return new_span
+
+    def extract_pages(self) :
+        doc = fitz.open(self.input_folder_path)
+        pages = []
+
+        for page in doc:
+            blocks = page.get_text("dict", sort=True)["blocks"]
+            page_num = page.number
+            pg = Page(number=page_num, target_language=self.language_config.get_target_language())
+            for drawing in page.get_drawings():
+                bbox = fitz.Rect(drawing.get('rect'))
+                pg.add_drawings([Drawing(bbox=bbox, page_number=page_num)])
+            min_x, max_x, min_y, max_y = self.get_content_dimensions(blocks)
+            pg.set_content_dimensions(min_x, max_x, min_y, max_y)
+
+            for block in blocks:
+                if block["type"] != 0:
+                    continue
+                for line in block.get("lines", []):
+                    for span in line.get("spans", []):
+                        new_span = self._parse_span(span, page_num)
+                        pg.add_span(new_span)
+
+            pages.append(pg)
+
+        self.pages = pages
+
+    @staticmethod
+    def get_content_dimensions(blocks: List[dict]) -> Tuple[float, float, float, float]:
+        """
+        Calculates the effective content width by finding the min/max X coordinates
+        of all text spans in text blocks.
+        """
+        min_x = float('inf')
+        max_x = float('-inf')
+        min_y = float('inf')
+        max_y = float('-inf')
+
+        for block in blocks:
+            if block["type"] != 0:  # Only text blocks
+                continue
+            for line in block.get("lines", []):
+                for span in line.get("spans", []):
+                    x0, y0, x1, y1 = span["bbox"]
+                    min_x = min(min_x, x0)
+                    max_x = max(max_x, x1)
+                    min_y = min(min_y, y0)
+                    max_y = max(max_y, y1)
+
+        if min_x == float('inf') or max_x == float('-inf') or min_y == float('inf') or max_y == float('-inf'):
+            return 0, 0, 0, 0  # No text found
+
+        return min_x, max_x, min_y, max_y
 
 
     def process_document(self):
         print('[INFO] Processing Document')
+        self.extract_pages()
+
         for page in self.pages:
             print(
                 f"Page {page.get_page_number()} Dimensions:\n"

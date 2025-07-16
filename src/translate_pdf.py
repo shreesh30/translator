@@ -168,85 +168,6 @@ class PDFTranslator:
             return ""
 
 
-    @staticmethod
-    def get_content_dimensions(blocks: List[dict]) -> Tuple[float, float, float, float]:
-        """
-        Calculates the effective content width by finding the min/max X coordinates
-        of all text spans in text blocks.
-        """
-        min_x = float('inf')
-        max_x = float('-inf')
-        min_y = float('inf')
-        max_y = float('-inf')
-
-        for block in blocks:
-            if block["type"] != 0:  # Only text blocks
-                continue
-            for line in block.get("lines", []):
-                for span in line.get("spans", []):
-                    x0, y0, x1, y1 = span["bbox"]
-                    min_x = min(min_x, x0)
-                    max_x = max(max_x, x1)
-                    min_y = min(min_y,y0)
-                    max_y = max(max_y, y1)
-
-        if min_x == float('inf') or max_x == float('-inf') or min_y== float('inf') or max_y == float('-inf'):
-            return 0, 0, 0 ,0  # No text found
-
-        return min_x, max_x, min_y, max_y
-
-    @staticmethod
-    def _parse_span(span: dict, page_num: int):
-        """
-        Parses a span and returns cleaned span information.
-        Converts ALL-UPPERCASE spans to Title Case (e.g., 'PREFACE' -> 'Preface', 'SIR B.N. RAU' -> 'Sir B.N. Rau').
-        """
-        text = span["text"].strip()
-        if not text:
-            return {}
-
-        font = span["font"]
-
-        # Preserve bold styling if present in font name
-        if "bold" in font.lower():
-            text = f"[123] {text} [456]"
-
-        new_span = Span()
-        new_span.set_text(text)
-        new_span.set_font(font)
-        new_span.set_font_size(span["size"])
-        new_span.set_page_num(page_num)
-        new_span.set_origin(span["origin"])
-        new_span.set_bbox(fitz.Rect(span["bbox"]))
-
-        return new_span
-
-    def extract_pages(self, pdf_path: str) -> List[Page]:
-        doc = fitz.open(pdf_path)
-        pages = []
-
-        for page in doc:
-            blocks = page.get_text("dict", sort=True)["blocks"]
-            page_num = page.number
-            pg = Page(number=page_num, target_language= self.target_language)
-            for drawing in page.get_drawings():
-                bbox = fitz.Rect(drawing.get('rect'))
-                pg.add_drawings([Drawing(bbox=bbox, page_number=page_num)])
-            min_x, max_x, min_y, max_y = self.get_content_dimensions(blocks)
-            pg.set_content_dimensions(min_x, max_x, min_y, max_y)
-
-            for block in blocks:
-                if block["type"] != 0:
-                    continue
-                for line in block.get("lines", []):
-                    for span in line.get("spans", []):
-                        new_span = self._parse_span(span, page_num)
-                        pg.add_span(new_span)
-
-            pages.append(pg)
-
-        return pages
-
     def translate_preserve_styles(self,paragraph, document_processor):
         # 1. Apply invisible style markers
         text = " ".join(line.get_text() for line in paragraph.get_lines())
@@ -281,6 +202,15 @@ class PDFTranslator:
                 translated_text = self.translate_text(footer.get_text(), self.target_language_key)
                 translated_footer.append(Footer(text= translated_text, font_size=footer.get_font_size()))
             paragraph.set_footers(translated_footer)
+
+        if paragraph.get_chapter():
+            translated_text = self.translate_text(paragraph.get_chapter(), self.target_language_key)
+            paragraph.set_chapter(translated_text)
+
+        if paragraph.get_volume():
+            translated_text = self.translate_text(paragraph.get_volume(), self.target_language_key)
+            paragraph.set_volume(translated_text)
+
         return paragraph
 
     def _add_chapter(self, paragraphs, drawings):
@@ -340,17 +270,16 @@ class PDFTranslator:
         applied_indent = False
 
         for i, word in enumerate(words):
-            bbox = font.getbbox(word)
-            word_width = bbox[2]-bbox[0]
-            additional_space = space_width if current_line else 0
-            projected_width = current_width + additional_space + word_width
-
             if self.is_tag(word):
                 current_line.append(word)
                 continue
 
+            word_width = font.getlength(word)
+
+            projected_width = current_width + space_width + word_width
+
             if not applied_indent:
-                projected_width=projected_width - word_width + para_indent #Subtract space width and add the tabs width
+                projected_width = word_width + para_indent
                 applied_indent = True
 
             if projected_width > max_width_pt:
@@ -384,12 +313,9 @@ class PDFTranslator:
         return False
 
     def process_pdf(self, input_folder_path: str,output_folder_path: str):
-        # 1. Extract text with styling
-        pages = self.extract_pages(input_folder_path)
-
         docx_doc = Document()
 
-        document_processor = DocumentProcessor(pages)
+        document_processor = DocumentProcessor(input_folder_path, self.language_config)
         document_processor.process_document()
 
         paragraphs = document_processor.get_paragraphs()

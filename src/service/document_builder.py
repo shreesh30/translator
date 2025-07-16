@@ -4,7 +4,7 @@ from typing import List, Dict
 from PIL import ImageFont
 from docx import Document
 from docx.enum.section import WD_SECTION
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt
@@ -13,21 +13,10 @@ from src.model.footer import Footer
 from src.model.language_config import LanguageConfig
 from src.model.paragraph import Paragraph
 from src.service.document_processor import DocumentProcessor
+from src.utils.utils import Utils
+
 
 class DocumentBuilder:
-    # PAGE DIMENSIONS
-    STANDARDIZED_PAGE_HEIGHT = Inches(11.69)
-    STANDARDIZED_PAGE_WIDTH = Inches(8.27)
-    STANDARDIZED_TOP_MARGIN = Inches(1.48)
-    STANDARDIZED_BOTTOM_MARGIN = Inches(1.38)
-    STANDARDIZED_LEFT_MARGIN = Inches(1.38)
-    STANDARDIZED_RIGHT_MARGIN = Inches(1.38)
-    STANDARDIZED_FOOTER_DISTANCE = Inches(1)
-
-    USABLE_PAGE_HEIGHT = (
-                STANDARDIZED_PAGE_HEIGHT.inches - STANDARDIZED_TOP_MARGIN.inches - STANDARDIZED_BOTTOM_MARGIN.inches)  # in inches
-    USABLE_PAGE_WIDTH = (
-                STANDARDIZED_PAGE_WIDTH.inches - STANDARDIZED_LEFT_MARGIN.inches - STANDARDIZED_RIGHT_MARGIN.inches)
     PAGE_USED = 0
 
     def __init__(self, language_config: LanguageConfig, document_processor: DocumentProcessor, document: Document):
@@ -43,9 +32,11 @@ class DocumentBuilder:
 
     def add_paragraphs(self, paragraphs: List[Paragraph]):
         pages = self.document_processor.get_pages()
+        _, page_number_start = self.document_processor.get_page_number_info()
+        header_page_number_start = page_number_start + 1
 
         for paragraph in paragraphs:
-            print(f'[INFO] Adding Paragraph:{paragraph} to Document')
+            print(f'[INFO] Adding Paragraph:{paragraph}')
             page = pages[paragraph.get_page_number()]
 
             lines = [line.get_text() for line in paragraph.get_lines()]
@@ -65,7 +56,7 @@ class DocumentBuilder:
                 space_used = self.PAGE_USED + final_line_height
 
                 # Check if we need to create a new section (page) or paragraph
-                if space_used > self.USABLE_PAGE_HEIGHT:
+                if space_used > Utils.USABLE_PAGE_HEIGHT:
                     print('[INFO] Creating New Section')
                     # If this is the last para in the section, remove space after for it before creating a new section
                     if self.document.paragraphs:
@@ -82,6 +73,7 @@ class DocumentBuilder:
                     self._configure_docx_section(self.document.sections[-1])
                     self.PAGE_USED = 0
                     current_para = None  # Force new paragraph on new page
+
                     if i!=0: #If it is not the first line of the paragraph on the new page, set the flag
                         continue_para = True
 
@@ -104,17 +96,70 @@ class DocumentBuilder:
             if has_footer and not footer_added:
                 self._add_footer(self.document.sections[-1], paragraph.get_footer())
 
-            self.PAGE_USED += (
-                    (paragraph.get_font_size() * 0.5) / 72)  # Adding to incorporate "Space After" after a paragraph
+            if len(self.document.sections) - 1 >= header_page_number_start:
+                section_index =  len(self.document.sections) - 1
+                is_volume = (section_index - header_page_number_start) % 2 == 0
+                self.add_header(paragraph, self.document.sections[-1], is_volume)
+
+            self.PAGE_USED += ((paragraph.get_font_size() * 0.5) / 72)  # Adding to incorporate "Space After" after a paragraph
 
             # Process sub-paragraphs
             if paragraph.get_sub_paragraphs():
                 self.add_paragraphs(paragraph.get_sub_paragraphs())
 
+    @staticmethod
+    def clear_header(header):
+        for para in header.paragraphs:
+            p = para._element
+            p.getparent().remove(p)
+
+    def get_text_width(self,text, font_size_pt):
+        font = ImageFont.truetype(self.language_config.get_target_font_path(), size=int(font_size_pt))
+        return font.getlength(text)
+
+    def add_header(self, paragraph, section, is_volume):
+        header = section.first_page_header
+        header.is_linked_to_previous = False
+        self.clear_header(header)
+
+        header_para = header.add_paragraph()
+
+        # Get header text based on type
+        header_text = paragraph.get_volume() if is_volume else paragraph.get_chapter()
+
+        if not header_text or not header_text.strip():
+            return
+
+        if is_volume:
+            # Reformat header text to insert tab stops
+            parts = header_text.split("[", 1)
+            if len(parts) == 2:
+                left, right = parts[0].strip(), "[" + parts[1]
+                usable_width = Utils.STANDARDIZED_PAGE_WIDTH - Utils.STANDARDIZED_LEFT_MARGIN - Utils.STANDARDIZED_RIGHT_MARGIN
+                center_tab = usable_width / 2
+                right_tab = usable_width-center_tab- self.get_text_width(left, 9 * self.language_config.get_font_size_multiplier())
+                header_text = f"\t{left}\t{right}"
+
+                header_para.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                tab_stops = header_para.paragraph_format.tab_stops
+                tab_stops.add_tab_stop(Inches(center_tab), alignment=WD_TAB_ALIGNMENT.CENTER)
+                tab_stops.add_tab_stop(Inches(right_tab/2), alignment=WD_TAB_ALIGNMENT.RIGHT)
+        else:
+            # Center-align chapter text
+            header_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        # Add text as a run
+        print(f'Adding Header: {header_text}')
+        run = header_para.add_run(header_text)
+        run.font.name = self.font_name
+        run.font.size = Pt(9 * self.language_config.get_font_size_multiplier())
+        run._element.rPr.rFonts.set(qn('w:eastAsia'), self.font_name)
+
     def _add_footer(self, section, para_footers: List[Footer]):
         """Adds footer ONLY to the current section's next page"""
+        print(f'[INFO] Adding Footers: {para_footers}')
         # 1. Get current section (always use last section)
-        section.footer_distance = self.STANDARDIZED_FOOTER_DISTANCE
+        section.footer_distance = Inches(Utils.STANDARDIZED_FOOTER_DISTANCE)
         footer = section.first_page_footer
         footer.is_linked_to_previous = False
 
@@ -233,12 +278,12 @@ class DocumentBuilder:
 
     def _configure_docx_section(self, section):
         # Set standard page dimensions and margins
-        section.page_height = self.STANDARDIZED_PAGE_HEIGHT
-        section.page_width = self.STANDARDIZED_PAGE_WIDTH
-        section.top_margin = self.STANDARDIZED_TOP_MARGIN
-        section.bottom_margin = self.STANDARDIZED_BOTTOM_MARGIN
-        section.left_margin = self.STANDARDIZED_LEFT_MARGIN
-        section.right_margin = self.STANDARDIZED_RIGHT_MARGIN
+        section.page_height = Inches(Utils.STANDARDIZED_PAGE_HEIGHT)
+        section.page_width = Inches(Utils.STANDARDIZED_PAGE_WIDTH)
+        section.top_margin = Inches(Utils.STANDARDIZED_TOP_MARGIN)
+        section.bottom_margin = Inches(Utils.STANDARDIZED_BOTTOM_MARGIN)
+        section.left_margin = Inches(Utils.STANDARDIZED_LEFT_MARGIN)
+        section.right_margin = Inches(Utils.STANDARDIZED_RIGHT_MARGIN)
 
         section.different_first_page_header_footer = True
         section.footer.is_linked_to_previous = False
@@ -297,7 +342,7 @@ class DocumentBuilder:
         print(f'[INFO] Adding Page Number: {page_number}')
         """Adds footer ONLY to the current section's next page"""
         # 1. Get current section (always use last section)
-        section.footer_distance = self.STANDARDIZED_FOOTER_DISTANCE
+        section.footer_distance = Inches(Utils.STANDARDIZED_FOOTER_DISTANCE)
         footer = section.first_page_footer
         footer.is_linked_to_previous = False
 
