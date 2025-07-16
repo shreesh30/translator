@@ -158,7 +158,7 @@ class PDFTranslator:
             print(f"[DEBUG] Translated: {final[0]}")
 
             # Apply replacements
-            for old, new in Utils.tag_map.items():
+            for old, new in Utils.TAGS.items():
                 final[0] = final[0].replace(old, new)
 
             return final[0]
