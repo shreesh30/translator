@@ -1,6 +1,6 @@
 import re
 from typing import List, Dict
-
+import logging
 from PIL import ImageFont
 from docx import Document
 from docx.enum.section import WD_SECTION
@@ -20,6 +20,8 @@ class DocumentBuilder:
     PAGE_USED = 0
 
     def __init__(self, language_config: LanguageConfig, document_processor: DocumentProcessor, document: Document):
+        self.logger = logging.getLogger(__name__)
+
         self.document_processor = document_processor
         self.language_config = language_config
         self.document = document
@@ -33,10 +35,14 @@ class DocumentBuilder:
     def add_paragraphs(self, paragraphs: List[Paragraph]):
         pages = self.document_processor.get_pages()
         _, page_number_start = self.document_processor.get_page_number_info()
-        header_page_number_start = page_number_start + 1
+        header_page_number_start = None
+
+        if page_number_start is not None:
+            header_page_number_start = page_number_start + 1
 
         for paragraph in paragraphs:
-            print(f'[INFO] Adding Paragraph:{paragraph}')
+            self.logger.info(f'Adding Paragraph:{paragraph}')
+
             page = pages[paragraph.get_page_number()]
 
             lines = [line.get_text() for line in paragraph.get_lines()]
@@ -49,15 +55,15 @@ class DocumentBuilder:
 
             for i, line in enumerate(lines):
                 # Calculate height of current line
+                line_spacing_in = (self.language_config.get_line_spacing_multiplier() * self.language_config.get_font_size_multiplier() * paragraph.get_font_size())/72
                 line_height = self.estimate_line_height(line, paragraph)
-                line_spacing = self.language_config.get_line_spacing_multiplier() * self.language_config.get_font_size_multiplier() * paragraph.get_font_size()
+                line_height_in = line_height/72
 
-                final_line_height = (line_height + line_spacing) / 72 if i != len(lines) - 1 else line_height / 72
-                space_used = self.PAGE_USED + final_line_height
+                predicted_space_used = self.PAGE_USED+line_spacing_in+line_height_in
 
                 # Check if we need to create a new section (page) or paragraph
-                if space_used > Utils.USABLE_PAGE_HEIGHT:
-                    print('[INFO] Creating New Section')
+                if predicted_space_used > Utils.USABLE_PAGE_HEIGHT:
+                    self.logger.info('Creating New Section')
                     # If this is the last para in the section, remove space after for it before creating a new section
                     if self.document.paragraphs:
                         current_para_format = self.document.paragraphs[-1].paragraph_format
@@ -79,7 +85,7 @@ class DocumentBuilder:
 
                 # Create new paragraph if needed (first line or line doesn't fit in current para)
                 if current_para is None:
-                    print('[INFO] Creating New Paragraph')
+                    self.logger.info('Creating New Paragraph')
                     current_para = self.document.add_paragraph()
                     self.set_rtl(current_para)
                     self._set_paragraph_alignment_and_indent(current_para, paragraph, page, self.document.sections[-1], continue_para)
@@ -91,16 +97,17 @@ class DocumentBuilder:
 
                 # Add the line to current paragraph
                 self._add_text_with_styling(current_para, line, paragraph)
-                self.PAGE_USED += line_height / 72
+                self.PAGE_USED += line_height_in
 
             if has_footer and not footer_added:
                 self._add_footer(self.document.sections[-1], paragraph.get_footer())
 
-            if len(self.document.sections) - 1 >= header_page_number_start:
+            if header_page_number_start is not None and len(self.document.sections) - 1 >= header_page_number_start:
                 section_index =  len(self.document.sections) - 1
                 is_volume = (section_index - header_page_number_start) % 2 == 0
                 self.add_header(paragraph, self.document.sections[-1], is_volume)
 
+            # TODO: CHECK HOW CAN WE AVOID ADDING SPACE AFTER FOR LAST LINE IN THE SECTION(CHECK IF THERE IS SPACE FOR ADDING 1 LINE OR NOT, IF THERE IS NOT THEN SKIP ADDING SPACE_AFTER ELSE ADD SPACE_AFTER)
             self.PAGE_USED += ((paragraph.get_font_size() * 0.5) / 72)  # Adding to incorporate "Space After" after a paragraph
 
             # Process sub-paragraphs
@@ -118,6 +125,7 @@ class DocumentBuilder:
         return font.getlength(text)
 
     def add_header(self, paragraph, section, is_volume):
+        self.logger.info(f'Processing Header: Paragraph: {paragraph}, Is Volume: {is_volume}')
         header = section.first_page_header
         header.is_linked_to_previous = False
         self.clear_header(header)
@@ -126,6 +134,7 @@ class DocumentBuilder:
 
         # Get header text based on type
         header_text = paragraph.get_volume() if is_volume else paragraph.get_chapter()
+        self.logger.info(f'Header Text: {header_text}')
 
         if not header_text or not header_text.strip():
             return
@@ -149,7 +158,7 @@ class DocumentBuilder:
             header_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
         # Add text as a run
-        print(f'Adding Header: {header_text}')
+        self.logger.info(f'Adding Header: {header_text}')
         run = header_para.add_run(header_text)
         run.font.name = self.font_name
         run.font.size = Pt(9 * self.language_config.get_font_size_multiplier())
@@ -157,7 +166,7 @@ class DocumentBuilder:
 
     def _add_footer(self, section, para_footers: List[Footer]):
         """Adds footer ONLY to the current section's next page"""
-        print(f'[INFO] Adding Footers: {para_footers}')
+        self.logger.info(f'Adding Footers: {para_footers}')
         # 1. Get current section (always use last section)
         section.footer_distance = Inches(Utils.STANDARDIZED_FOOTER_DISTANCE)
         footer = section.first_page_footer
@@ -330,16 +339,17 @@ class DocumentBuilder:
 
     def _set_paragraph_spacing(self, paragraph_obj, paragraph_data):
         para_format = paragraph_obj.paragraph_format
-        para_format.space_after = Pt(paragraph_data.get_font_size() * 0.5)
+        # TODO: DIFFERENT LINE SPACING FOR DIFFERENT PAGES
         para_format.line_spacing = Pt(
             paragraph_data.get_font_size() *
             self.language_config.get_font_size_multiplier() *
             self.language_config.get_line_spacing_multiplier()
         )
+        para_format.space_after = Pt(paragraph_data.get_font_size() * 0.5)
         para_format.space_before = Pt(0)
 
     def _add_page_number(self, section, page_number):
-        print(f'[INFO] Adding Page Number: {page_number}')
+        self.logger.info(f'Adding Page Number: {page_number}')
         """Adds footer ONLY to the current section's next page"""
         # 1. Get current section (always use last section)
         section.footer_distance = Inches(Utils.STANDARDIZED_FOOTER_DISTANCE)
@@ -355,8 +365,10 @@ class DocumentBuilder:
         run._element.rPr.rFonts.set(qn('w:eastAsia'), self.font_name)  # For East Asian fonts
 
     def add_page_numbers(self):
+        self.logger.info('Adding Page Numbers')
         extracted_page_number, page_number_start = self.document_processor.get_page_number_info()
-        for idx, section in enumerate(self.document.sections):
-            if idx >= page_number_start:
-                self._add_page_number(section, extracted_page_number)
-                extracted_page_number += 1
+        if extracted_page_number is not None and page_number_start is not None:
+            for idx, section in enumerate(self.document.sections):
+                if idx >= page_number_start:
+                    self._add_page_number(section, extracted_page_number)
+                    extracted_page_number += 1

@@ -15,7 +15,7 @@ from typing import List, Dict
 @dataclass
 class Page:
     number: int = field(default_factory=int)
-    spans: List[Span]  = field(default_factory=list, repr=True)
+    spans: List[Span]  = field(default_factory=list, repr=False)
     lines: List[Line] = field(default_factory=list, repr = False)
     paragraphs: List[Paragraph] = field(default_factory=list)
     headers: List[Header] = field(default_factory=list)
@@ -29,6 +29,7 @@ class Page:
     content_height:float = field(default_factory=float)
     target_language: str = field(default_factory=str, repr=False)
     extracted_page_number: str = field(default_factory=str)
+    line_spacing: int = field(default_factory=int)
 
     def _get_footer_line_y(self):
         """Returns the Y position of a full-width horizontal line if detected."""
@@ -45,21 +46,21 @@ class Page:
     def _build_paragraph(self, lines):
         paragraph_centered = False
         for line in lines:
-            left_indent = int(line.get_bbox().x0) - int(self.get_min_x())
-            right_indent = int(self.get_max_x()) - int(line.get_bbox().x1)
+            left_indent = int(line.get_line_bbox().x0) - int(self.get_min_x())
+            right_indent = int(self.get_max_x()) - int(line.get_line_bbox().x1)
             if abs(left_indent - right_indent) > 1:
                 paragraph_centered = False
             else:
                 paragraph_centered = True
 
 
-        x0 = lines[0].get_bbox().x0
-        y0 = lines[0].get_bbox().y0
+        x0 = lines[0].get_line_bbox().x0
+        y0 = lines[0].get_line_bbox().y0
         if paragraph_centered:
-            x1= lines[0].get_bbox().x1
+            x1= lines[0].get_line_bbox().x1
         else:
-            x1 = lines[-1].get_bbox().x1
-        y1 = lines[-1].get_bbox().y1
+            x1 = lines[-1].get_line_bbox().x1
+        y1 = lines[-1].get_line_bbox().y1
 
         para_bbox = fitz.Rect(x0, y0, x1, y1)
         font_size = lines[0].get_font_size()
@@ -76,6 +77,9 @@ class Page:
 
     def add_span(self, span):
         self.spans.append(span)
+
+    def add_line(self, line):
+        self.lines.append(line)
 
     def add_paragraph(self, para):
         self.paragraphs.append(para)
@@ -140,60 +144,41 @@ class Page:
     def get_drawings(self):
         return self.drawings
 
+    def get_line_spacing(self):
+        return self.line_spacing
+
     def compute_content_dimensions(self):
         self.content_width = self.max_x - self.min_x
         self.content_height = self.max_y - self.min_y
 
-    def group_by_lines(self):
-        """Group text spans into Line objects based on shared Y position.
-        Adds space only when font size increases significantly within the same line.
-        Stores the result in self.lines.
-        """
+    def group_lines(self):
         lines = []
         current_line = None
 
-        for span in self.spans:
-            if not span.get_text():
+        for line in self.lines:
+            if not line.get_text():
                 continue
 
-            is_new_line = (
-                    current_line is None or
-                    span.get_bbox().y1 - current_line.get_bbox().y1 > 1
-            )
+            is_new_line = (current_line is None or abs(line.get_line_bbox().y1 - current_line.get_line_bbox().y1) >1)
 
             if is_new_line:
                 if current_line:
                     lines.append(current_line)
 
-                current_line = Line(page_number=self.get_page_number())
-                current_line.set_text(span.get_text().lower())
-                current_line.set_bbox(fitz.Rect(span.get_bbox()))
-                current_line.set_origin(span.get_origin())
-                current_line.set_font_size(span.get_font_size())
-                current_line.set_line_bbox(fitz.Rect(span.get_bbox()))
+                current_line = line
             else:
-                # Update text
-                current_line.set_text(current_line.get_text() + " " + span.get_text().lower())
+                current_line.set_text(current_line.get_text()+ " "+ line.get_text() )
 
-                # Update bbox
-                curr_bbox = span.get_bbox()
+                current_bbox = line.get_line_bbox()
+
                 updated_bbox = fitz.Rect(
-                    current_line.get_bbox().x0,
-                    current_line.get_bbox().y0,
-                     curr_bbox.x1,
-                     curr_bbox.y1,
+                    current_line.get_line_bbox().x0,
+                    current_line.get_line_bbox().y0,
+                    current_bbox.x1,
+                    current_bbox.y1
                 )
-                current_line.set_bbox(updated_bbox)
                 current_line.set_line_bbox(updated_bbox)
-
-                # Update origin
-                origin_x = min(current_line.get_origin()[0], span.get_origin()[0])
-                origin_y = max(current_line.get_origin()[1], span.get_origin()[1])
-                current_line.set_origin((origin_x, origin_y))
-
-                # Update font size
-                current_line.set_font_size(max(current_line.font_size, span.get_font_size()))
-
+                current_line.set_font_size(max(current_line.font_size, line.get_font_size()))
 
         if current_line:
             lines.append(current_line)
@@ -211,7 +196,7 @@ class Page:
             is_new_para = (
                     i > 0 and (
                     line.get_page_number() != self.lines[i - 1].get_page_number() or
-                    int(line.get_line_bbox().y0) - int(self.lines[i-1].get_line_bbox().y1)>=0
+                    line.get_line_bbox().y0 - self.lines[i-1].get_line_bbox().y1>self.line_spacing
             )
             )
 
@@ -291,6 +276,18 @@ class Page:
                     footer.set_text(footer.get_text() + " " + line_text)
 
         self.footers = new_footers
+
+    def find_line_spacing(self):
+        line_spacing = 0
+
+        for i,line in enumerate(self.lines):
+              if i>0:
+                  line_spacing += line.get_line_bbox().y0-self.lines[i-1].get_line_bbox().y1
+
+
+        line_spacing = line_spacing/len(self.lines)
+        self.line_spacing = line_spacing
+
 
     def process_header(self, headers):
         if not headers:
@@ -385,9 +382,9 @@ class Page:
                 placeholder_map[placeholder] = abbr.upper()
                 text = text.replace(matches[i], placeholder)
 
-            # Fix general punctuation spacing
-            text = re.sub(r'\s+([.,:;])', r'\1', text)  # "dec ." → "dec."
-            text = re.sub(r'([.,:;])(?=\S)', r'\1 ', text)  # "dec.1946" → "dec. 1946"
+            # # Fix general punctuation spacing
+            # text = re.sub(r'\s+([.,:;])', r'\1', text)  # "dec ." → "dec."
+            # text = re.sub(r'([.,:;])(?=\S)', r'\1 ', text)  # "dec.1946" → "dec. 1946"
 
             # Restore abbreviations safely
             for placeholder, abbr in placeholder_map.items():
@@ -444,10 +441,10 @@ class Page:
         return bool(re.search(r'[^A-Za-z\s]', prefix))
 
     def process_page(self):
-        self.normalize_spans()
-        self.group_by_lines()
+        self.group_lines()
         self.fix_punctuation_spacing()
         self.process_lines()
+        self.find_line_spacing()
         self.group_by_paragraphs()
         self.compute_content_dimensions()
         self.map_footers_to_paragraphs()

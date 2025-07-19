@@ -5,12 +5,14 @@ from typing import List
 
 import fitz
 
+from src.model.element import Element
 from src.model.footer import Footer
 from src.model.line import Line
+from src.utils.utils import Utils
 
 
 @dataclass
-class Paragraph:
+class Paragraph(Element):
     page_number:int = field(default_factory=int)
     lines: List[Line] = field(default_factory=list)
     footer: List[Footer] = field(default_factory=list)
@@ -21,6 +23,9 @@ class Paragraph:
     sub_paragraphs: List[Paragraph] = field(default_factory=list)
     chapter: str = field(default_factory=str)
     volume: str = field(default_factory=str)
+
+    def __post_init__(self):
+        self.element_type = Utils.TYPE_PARAGRAPH
 
     def set_lines(self, lines):
         self.lines = lines

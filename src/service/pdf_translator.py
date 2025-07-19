@@ -1,7 +1,7 @@
-import os
 import re
 import sys
-from typing import Tuple, List
+import os
+import logging
 
 import fitz
 import torch
@@ -14,12 +14,9 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont as ReportlabTTFont
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, BitsAndBytesConfig
 
-from src.model.drawing import Drawing
 from src.model.footer import Footer
 from src.model.language_config import LanguageConfig
 from src.model.line import Line
-from src.model.page import Page
-from src.model.span import Span
 from src.service.document_builder import DocumentBuilder
 from src.service.document_processor import DocumentProcessor
 from src.utils.utils import Utils
@@ -44,6 +41,8 @@ class PDFTranslator:
     PAGE_USED = 0
 
     def __init__(self,lang_config:LanguageConfig, quantization=None):
+        self.logger = logging.getLogger(__name__)
+
         sys.stdout.reconfigure(encoding='utf-8')
         sys.stderr.reconfigure(encoding='utf-8')
 
@@ -62,19 +61,18 @@ class PDFTranslator:
         self.font_name = self.load_and_register_font(self.language_config.get_target_font_path())
         self.language_config.set_target_font_name(self.font_name)
 
-    @staticmethod
-    def load_and_register_font(font_path):
+    def load_and_register_font(self ,font_path):
         try:
             tt = FontToolsTTFont(font_path)
             font_name = tt['name'].getDebugName(1).split('-')[0]
             tt.close()
-            print(f"Detected font name: {font_name}")
+            self.logger.info(f"Detected font name: {font_name}")
         except Exception as e:
             raise RuntimeError(f"Font metadata read failed: {str(e)}")
 
         try:
             pdfmetrics.registerFont(ReportlabTTFont(font_name, font_path))
-            print(f"Successfully registered font: {font_name}")
+            self.logger.info(f"Successfully registered font: {font_name}")
         except Exception as e:
             raise RuntimeError(f"Font registration failed: {str(e)}")
 
@@ -117,16 +115,16 @@ class PDFTranslator:
 
 
     def translate_text(self, text: str, tgt_lang: str) -> str:
-        print(f"[INFO] Translating single text to {tgt_lang}...")
-        print(f"[INFO] Translating the text:")
-        print(text)
+        self.logger.info(f"Translating single text to {tgt_lang}...")
+        self.logger.info(f"Translating the text: {text}")
+
         try:
             processed = self.processor.preprocess_batch([text], src_lang=self.source_language_key, tgt_lang=tgt_lang)
-            print(f"[DEBUG] Preprocessed: {processed}")
+            self.logger.debug(f"Preprocessed: {processed}")
 
             inputs = self.tokenizer(processed, truncation=True, padding=True, return_tensors="pt").to(
                 self.DEVICE)
-            print(f"[DEBUG] Tokenized Inputs: {inputs}")
+            self.logger.debug(f"Tokenized Inputs: {inputs}")
 
             with torch.no_grad():
                 output = self.model.generate(
@@ -142,20 +140,19 @@ class PDFTranslator:
                     no_repeat_ngram_size=3
                 )
 
-                print(f"[DEBUG] Generated Token IDs: {output}")
+                self.logger.debug(f"Generated Token IDs: {output}")
 
-            with self.tokenizer.as_target_tokenizer():
-                decoded = self.tokenizer.batch_decode(
+            decoded = self.tokenizer.batch_decode(
                     output.detach().cpu().tolist(),
                     skip_special_tokens=True,
                     clean_up_tokenization_spaces=False
                 )
 
-                print(f"[DEBUG] Decoded Test: {decoded}")
+            self.logger.debug(f"Decoded Test: {decoded}")
 
             final = self.processor.postprocess_batch(decoded, lang=tgt_lang)
-            print(f"[DEBUG] Postprocessed Translations: {final}")
-            print(f"[DEBUG] Translated: {final[0]}")
+            self.logger.debug(f"Postprocessed Translations: {final}")
+            self.logger.debug(f"Translated: {final[0]}")
 
             # Apply replacements
             for old, new in Utils.TAGS.items():
@@ -164,7 +161,7 @@ class PDFTranslator:
             return final[0]
 
         except Exception as e:
-            print(f"[ERROR] Translation failed: {e}")
+            self.logger.error(f"Translation failed: {e}")
             return ""
 
 
@@ -174,7 +171,7 @@ class PDFTranslator:
 
         translated_text = self.translate_text(text, self.target_language_key)
 
-        print(f'[INFO] Translated Text: {translated_text}')
+        self.logger.info(f'Translated Text: {translated_text}')
 
         lines = self.split_into_lines(translated_text, paragraph, document_processor)
 
@@ -185,7 +182,6 @@ class PDFTranslator:
             new_lines.append(Line(page_number=paragraph.get_page_number(),
                                   text=new_line,
                                   line_bbox= line_bbox,
-                                  bbox=line_bbox,
                                   font_size=paragraph.get_font_size()))
 
         paragraph.set_lines(new_lines)
@@ -319,19 +315,19 @@ class PDFTranslator:
         document_processor.process_document()
 
         paragraphs = document_processor.get_paragraphs()
-        print(f'[INFO] Paragraphs: {paragraphs}')
+        self.logger.info(f'Paragraphs: {paragraphs}')
 
         document_builder = DocumentBuilder(document=docx_doc ,language_config= self.language_config, document_processor=document_processor)
 
         translated_paragraphs = []
         for paragraph in paragraphs:
             translated_para = self.translate_preserve_styles(paragraph, document_processor)
-            print(f'Translated Paragraph: {translated_para}')
+            self.logger.info(f'Translated Paragraph: {translated_para}')
             translated_paragraphs.append(translated_para)
 
         document_builder.build_document(paragraphs)
 
-        print(f'[INFO] Total Sections: {len(docx_doc.sections)}')
+        self.logger.info(f'Total Sections: {len(docx_doc.sections)}')
 
         file_name = os.path.splitext(os.path.basename(input_folder_path))[0]
         output_docx_path = os.path.join(output_folder_path,"{}.docx".format(file_name + '_' + self.language_config.get_target_language()))
@@ -343,6 +339,11 @@ class PDFTranslator:
             # 4. HANDLE HEADERS AND FOOTERS DIFFERENTLY
             # 5. MANAGE FORMAT BETTER
             # 6. FOR THE CONTENTS TABLE, JUST TRANSLATE THE CONTENTS, LEAVE THE PAGE NUMBERS BLANK
+
+        # ISSUES:
+        # 1. EXTRA SPACE IS GETTING ADDED IN EVERY PAGE BETWEEN THE FOOTER AND THE LAST LINE
+        # 2. DIFFERENT PAGES REQUIRE DIFFERENT LINE SPACING, SO MAINTAIN THAT
+
 
         '''Texts like below are appearing as separate paragraphs
                 1. The Hon’ble Sri C. Rajagopalachariar.

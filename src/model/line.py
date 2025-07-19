@@ -1,26 +1,22 @@
+from dataclasses import dataclass, field
 from typing import Tuple
 
 import fitz
 
-from dataclasses import dataclass, field
 
 @dataclass
 class Line:
     page_number: int = field(default_factory=int, repr=False)
     text: str = ""
     line_bbox: fitz.Rect = field(default_factory=fitz.Rect)
-    bbox:fitz.Rect  = field(default_factory=fitz.Rect, repr=False)
     origin: Tuple[float, float]  = field(default_factory=tuple)
-    font_size: float = field(default_factory=int, repr=False)
+    font_size: float = field(default_factory=int, repr=True)
 
     def set_text(self, text):
         self.text = text
 
     def set_line_bbox(self, bbox):
         self.line_bbox = bbox
-
-    def set_bbox(self, bbox):
-        self.bbox = bbox
 
     def set_origin(self, origin):
         self.origin =  origin
@@ -33,9 +29,6 @@ class Line:
 
     def get_line_bbox(self):
         return self.line_bbox
-
-    def get_bbox(self):
-        return self.bbox
 
     def get_origin(self):
         return self.origin

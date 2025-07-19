@@ -1,17 +1,20 @@
 import re
 from collections import Counter, defaultdict
 from typing import List, Tuple
-
+import logging
 import fitz
 
 from src.model.drawing import Drawing
 from src.model.page import Page
 from src.model.paragraph import Paragraph
 from src.model.span import Span
+from src.model.line import Line
 
 
 class DocumentProcessor:
     def __init__(self, input_folder_path, language_config):
+        self.logger = logging.getLogger(__name__)
+
         self.input_folder_path = input_folder_path
         self.language_config = language_config
         self.pages = None
@@ -96,8 +99,17 @@ class DocumentProcessor:
         para_start = counter.most_common(1)[0][0]
         return para_start
 
+    def get_avg_font_size(self):
+        font_size = 0
+        for para in self.paragraphs:
+            font_size+=para.get_font_size()
+
+
+        return int(font_size/len(self.paragraphs))
+
     def create_sub_paragraphs(self):
         para_start = self.get_paragraph_start()
+        avg_font_size = self.get_avg_font_size()
         for paragraph in self.paragraphs:
             original_lines = paragraph.get_lines()
             new_main_lines = []
@@ -109,26 +121,23 @@ class DocumentProcessor:
                 min_x = page.get_min_x()
                 max_x = page.get_max_x()
                 line_bbox = line.get_line_bbox()
-                left_indent = int(line.get_line_bbox().x0) - int(page.get_min_x())
-                right_indent = int(page.get_max_x()) - int(line.get_line_bbox().x1)
 
                 is_sub_para = False
-                layout_is_centered = abs(left_indent - right_indent) <= 1
 
-                if i > 0 and line.get_font_size() > 9:
+                if i > 0 and line.get_font_size()>=avg_font_size:
+                    prev_line = original_lines[i-1]
                     # Left-aligned logic
-                    if ((int(line_bbox.x0) == int(para_start) and int(line_bbox.x0) != int(min_x)) or (
-                            int(line_bbox.x0) > int(para_start))) and not layout_is_centered:
+                    if int(line_bbox.x0) == int(para_start) or (int(original_lines[i-1].get_line_bbox().x1)!=int(max_x) and not self.is_centered(prev_line,prev_line.get_page_number())):
                         is_sub_para = True
-
-                    #  Center-aligned logic
-                    elif layout_is_centered and left_indent != 0 and right_indent != 0:
-                        is_sub_para = False
 
                     #  Right-aligned logic
                     elif int(line_bbox.x0) != int(para_start) and int(line_bbox.x0) != int(min_x) and int(
                             line_bbox.x1) == int(max_x):
                         is_sub_para = True
+
+                        #  Center-aligned logic
+                    elif self.is_centered(line, line.get_page_number()):
+                        is_sub_para = False
 
                 new_sub_para = is_sub_para
 
@@ -199,10 +208,17 @@ class DocumentProcessor:
         right_indent = int(page.get_max_x()) - int(bbox.x1)
         return left_indent == 0 and right_indent == 0
 
-    def is_centered(self, paragraph, page_number):
+    def is_centered(self, element, page_number):
         page = self.pages[page_number]
-        left_indent = int(paragraph.get_para_bbox().x0) - int(page.get_min_x())
-        right_indent = int(page.get_max_x()) - int(paragraph.get_para_bbox().x1)
+        bbox = fitz.Rect()
+
+        if isinstance(element, Paragraph):
+            bbox = element.get_para_bbox()
+        elif isinstance(element, Line):
+            bbox = element.get_line_bbox()
+
+        left_indent = int(bbox.x0) - int(page.get_min_x())
+        right_indent = int(page.get_max_x()) - int(bbox.x1)
 
         return abs(left_indent - right_indent) <= 1 and left_indent != 0 and right_indent != 0
 
@@ -285,7 +301,7 @@ class DocumentProcessor:
         Parses a span and returns cleaned span information.
         Converts ALL-UPPERCASE spans to Title Case (e.g., 'PREFACE' -> 'Preface', 'SIR B.N. RAU' -> 'Sir B.N. Rau').
         """
-        text = span["text"].strip()
+        text = span["text"]
         if not text:
             return {}
 
@@ -293,7 +309,7 @@ class DocumentProcessor:
 
         # Preserve bold styling if present in font name
         if "bold" in font.lower():
-            text = f"[123] {text} [456]"
+            text = f"[123]{text}[456]"
 
         new_span = Span()
         new_span.set_text(text)
@@ -323,13 +339,39 @@ class DocumentProcessor:
                 if block["type"] != 0:
                     continue
                 for line in block.get("lines", []):
+                    line_obj = Line(page_number= page_num)
+                    # line_obj.set_bbox(fitz.Rect(line.get('bbox')))
+                    line_obj.set_line_bbox(fitz.Rect(line.get('bbox')))
+
                     for span in line.get("spans", []):
                         new_span = self._parse_span(span, page_num)
-                        pg.add_span(new_span)
+                        line_obj.set_text(line_obj.get_text().lower()+new_span.get_text().lower())
+                        line_obj.set_font_size(new_span.get_font_size())
+                    pg.add_line(line_obj)
 
             pages.append(pg)
 
         self.pages = pages
+
+    def extract_tables(self):
+        doc = fitz.open(self.input_folder_path)
+
+        for page in doc:
+            tables = page.find_tables()
+            if tables.tables:
+                for t_index, table in enumerate(tables.tables):
+                    print(f'============tale.cells {table.cells}')
+                    print(f'============tale.bbox {table.bbox}')
+
+                    print(f'============tale.row_count {table.row_count}')
+                    print(f'============tale.col_count {table.col_count}')
+                    print(f'============tale.to_markdown{table.to_markdown()}')
+                    data = table.extract()
+                    print(f'==================table data: {data}')
+                    for i,row in enumerate(table.rows):
+                        print(f'================row {i}: {row}')
+                        for r in row.rows:
+                            print(f'============r {r}')
 
     @staticmethod
     def get_content_dimensions(blocks: List[dict]) -> Tuple[float, float, float, float]:
@@ -360,11 +402,12 @@ class DocumentProcessor:
 
 
     def process_document(self):
-        print('[INFO] Processing Document')
+        self.logger.info('Processing Document')
         self.extract_pages()
 
+        # self.extract_tables()
         for page in self.pages:
-            print(
+            self.logger.info(
                 f"Page {page.get_page_number()} Dimensions:\n"
                 f"Min X: {page.get_min_x()}\n"
                 f"Max X: {page.get_max_x()}\n"
@@ -372,7 +415,9 @@ class DocumentProcessor:
                 f"Max Y: {page.get_max_y()}"
             )
             page.process_page()
+            self.logger.info(f'Page: {page}')
 
+        #
         self.paragraphs = [para for page in self.pages for para in page.get_paragraphs()]
         if self.paragraphs:
             self.merge_paragraphs()

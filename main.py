@@ -1,11 +1,26 @@
+import logging
 from src.model.language_config import LanguageConfig
-from src.translate_pdf import PDFTranslator
+from src.service.pdf_translator import PDFTranslator
+
+def setup_console_logging():
+    """Configure logging to print only to console."""
+    logging.basicConfig(
+        level=logging.INFO,  # Set default level (INFO or DEBUG)
+        format='%(name)s - %(levelname)s - %(message)s',
+    )
 
 if __name__ == "__main__":
+    setup_console_logging()
     # input_pdf_path = "resource/input/cad_21-07-1947.pdf.DEBATE27-4-12-1-2.pdf"  # Replace with your file
+    # input_pdf_path = "resource/input/cad_21-07-1947.pdf.DEBATE27-4-12-1-3.pdf"  # Replace with your file
     # input_pdf_path = "resource/input/cad_21-07-1947.pdf.DEBATE27-4-12.pdf"               # Replace with your file
     # input_pdf_path = "resource/input/cad_09-12-1946_pages_16_to_23.pdf"               # Replace with your file
-    input_pdf_path = "resource/input/original-doc-16-17.pdf"               # Replace with your file
+    # input_pdf_path = "resource/input/original-doc-16-17.pdf"               # Replace with your file
+    # input_pdf_path = "resource/input/table-1.pdf"               # Replace with your file
+    input_pdf_path = "resource/input/preface-og.pdf"               # Replace with your file
+    # input_pdf_path = "resource/input/original-doc.pdf"               # Replace with your file
+    # input_pdf_path = "resource/input/original-doc-4.pdf"               # Replace with your file
+    # input_pdf_path = "resource/input/cad_09-12-1946_pages_16_to_23-1.pdf"               # Replace with your file
     output_pdf_path = "/Users/shreesharya/Documents/Development/Translator/resource/output/translated.pdf"  # Output filename
 
     input_file = "src/IndicTrans/train_data/multi_lang_tagged_train.tsv"
@@ -16,10 +31,10 @@ if __name__ == "__main__":
         #                target_font_path="resource/fonts/SakalBharati_N_Ship.ttf", font_multiplier=1.1,
         #                line_spacing_multiplier=1.25),
         # LanguageConfig(target_language="Bengali", target_language_key="ben_Beng",
-        #                target_font_path="resource/fonts/bnotdurga_n_ship.ttf", font_multiplier=1.1,
+        #                target_font_path="resource/fonts/bnotdurga_n_ship.ttf", font_size_multiplier=1.1,
         #                line_spacing_multiplier=1.25),
         LanguageConfig(target_language="Hindi", target_language_key="hin_Deva",
-                       target_font_path="resource/fonts/DVOTSurekh_N_Ship.ttf", font_multiplier=1.1,
+                       target_font_path="resource/fonts/DVOTSurekh_N_Ship.ttf", font_size_multiplier=1.1,
                        line_spacing_multiplier=1.25),
         # LanguageConfig(target_language="Dogri", target_language_key="doi_Deva",
         #                target_font_path="resource/fonts/SakalBharati_N_Ship.ttf", font_multiplier=1.1,
