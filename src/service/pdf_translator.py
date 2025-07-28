@@ -2,12 +2,14 @@ import re
 import sys
 import os
 import logging
+from concurrent.futures.thread import ThreadPoolExecutor
 
 import fitz
 import torch
 from IndicTransToolkit.processor import IndicProcessor
 from PIL import ImageFont
 from docx import Document
+from multiprocessing import Lock
 from docx.shared import Inches
 from fontTools.ttLib import TTFont as FontToolsTTFont
 from reportlab.pdfbase import pdfmetrics
@@ -17,15 +19,19 @@ from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, BitsAndBytesConfi
 from src.model.footer import Footer
 from src.model.language_config import LanguageConfig
 from src.model.line import Line
+from src.model.paragraph import Paragraph
+from src.model.table import Table
 from src.service.document_builder import DocumentBuilder
 from src.service.document_processor import DocumentProcessor
 from src.utils.utils import Utils
 
+logger = logging.getLogger(__name__)
 
 class PDFTranslator:
     BATCH_SIZE = 10
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     CKPT_DIR = 'ai4bharat/indictrans2-en-indic-1B'
+    GPU_LOCK = Lock()
 
     # PAGE DIMENSIONS
     STANDARDIZED_PAGE_HEIGHT =Inches(11.69)
@@ -41,8 +47,6 @@ class PDFTranslator:
     PAGE_USED = 0
 
     def __init__(self,lang_config:LanguageConfig, quantization=None):
-        self.logger = logging.getLogger(__name__)
-
         sys.stdout.reconfigure(encoding='utf-8')
         sys.stderr.reconfigure(encoding='utf-8')
 
@@ -66,13 +70,13 @@ class PDFTranslator:
             tt = FontToolsTTFont(font_path)
             font_name = tt['name'].getDebugName(1).split('-')[0]
             tt.close()
-            self.logger.info(f"Detected font name: {font_name}")
+            logger.info(f"Detected font name: {font_name}")
         except Exception as e:
             raise RuntimeError(f"Font metadata read failed: {str(e)}")
 
         try:
             pdfmetrics.registerFont(ReportlabTTFont(font_name, font_path))
-            self.logger.info(f"Successfully registered font: {font_name}")
+            logger.info(f"Successfully registered font: {font_name}")
         except Exception as e:
             raise RuntimeError(f"Font registration failed: {str(e)}")
 
@@ -115,32 +119,32 @@ class PDFTranslator:
 
 
     def translate_text(self, text: str, tgt_lang: str) -> str:
-        self.logger.info(f"Translating single text to {tgt_lang}...")
-        self.logger.info(f"Translating the text: {text}")
+        logger.info(f"Translating single text to {tgt_lang}...")
+        logger.info(f"Translating the text: {text}")
 
         try:
             processed = self.processor.preprocess_batch([text], src_lang=self.source_language_key, tgt_lang=tgt_lang)
-            self.logger.debug(f"Preprocessed: {processed}")
+            logger.debug(f"Preprocessed: {processed}")
 
             inputs = self.tokenizer(processed, truncation=True, padding=True, return_tensors="pt").to(
                 self.DEVICE)
-            self.logger.debug(f"Tokenized Inputs: {inputs}")
+            logger.debug(f"Tokenized Inputs: {inputs}")
+            with PDFTranslator.GPU_LOCK:
+                with torch.no_grad():
+                    output = self.model.generate(
+                        **inputs,
+                        min_length=0,
+                        max_length=1024,
+                        num_beams=6,
+                        length_penalty=1.0,
+                        early_stopping=True,
+                        repetition_penalty=1.1,
+                        do_sample=True,
+                        temperature = 0.7,
+                        no_repeat_ngram_size=3
+                    )
 
-            with torch.no_grad():
-                output = self.model.generate(
-                    **inputs,
-                    min_length=0,
-                    max_length=1024,
-                    num_beams=6,
-                    length_penalty=1.0,
-                    early_stopping=True,
-                    repetition_penalty=1.1,
-                    do_sample=True,
-                    temperature = 0.7,
-                    no_repeat_ngram_size=3
-                )
-
-                self.logger.debug(f"Generated Token IDs: {output}")
+                logger.debug(f"Generated Token IDs: {output}")
 
             decoded = self.tokenizer.batch_decode(
                     output.detach().cpu().tolist(),
@@ -148,11 +152,11 @@ class PDFTranslator:
                     clean_up_tokenization_spaces=False
                 )
 
-            self.logger.debug(f"Decoded Test: {decoded}")
+            logger.debug(f"Decoded Test: {decoded}")
 
             final = self.processor.postprocess_batch(decoded, lang=tgt_lang)
-            self.logger.debug(f"Postprocessed Translations: {final}")
-            self.logger.debug(f"Translated: {final[0]}")
+            logger.debug(f"Post processed Translations: {final}")
+            logger.debug(f"Translated: {final[0]}")
 
             # Apply replacements
             for old, new in Utils.TAGS.items():
@@ -161,56 +165,94 @@ class PDFTranslator:
             return final[0]
 
         except Exception as e:
-            self.logger.error(f"Translation failed: {e}")
+            logger.error(f"Translation failed: {e}")
             return ""
 
 
-    def translate_preserve_styles(self,paragraph, document_processor):
-        # 1. Apply invisible style markers
-        text = " ".join(line.get_text() for line in paragraph.get_lines())
+    def translate_paragraph(self,paragraph : Paragraph, document_processor: DocumentProcessor):
+        try:
+            # 1. Apply invisible style markers
+            text = " ".join(line.get_text() for line in paragraph.get_lines())
 
-        translated_text = self.translate_text(text, self.target_language_key)
+            translated_text = self.translate_text(text, self.target_language_key)
 
-        self.logger.info(f'Translated Text: {translated_text}')
+            logger.info(f'Translated Text: {translated_text}')
 
-        lines = self.split_into_lines(translated_text, paragraph, document_processor)
+            lines = self.split_into_lines(translated_text, paragraph, document_processor)
 
-        new_lines=[]
-        for line in lines:
-            new_line = self.convert_tags_to_angle_brackets(line)
-            line_bbox = self.get_line_bbox(new_line, paragraph.get_font_size())
-            new_lines.append(Line(page_number=paragraph.get_page_number(),
-                                  text=new_line,
-                                  line_bbox= line_bbox,
-                                  font_size=paragraph.get_font_size()))
+            new_lines=[]
+            for line in lines:
+                new_line = self.convert_tags_to_angle_brackets(line)
+                line_bbox = self.get_line_bbox(new_line, paragraph.get_font_size())
+                new_lines.append(Line(page_number=paragraph.get_page_number(),
+                                      text=new_line,
+                                      line_bbox= line_bbox,
+                                      font_size=paragraph.get_font_size()))
 
-        paragraph.set_lines(new_lines)
+            paragraph.set_lines(new_lines)
 
-        if paragraph.get_sub_paragraphs():
-            sub_para = []
-            for para in paragraph.get_sub_paragraphs():
-                sub_para.append(self.translate_preserve_styles(para, document_processor))
-            paragraph.set_sub_paragraphs(sub_para)
+            if paragraph.get_sub_paragraphs():
+                sub_para = []
+                for para in paragraph.get_sub_paragraphs():
+                    sub_para.append(self.translate_paragraph(para, document_processor))
+                paragraph.set_sub_paragraphs(sub_para)
 
-        if paragraph.get_footer():
-            translated_footer=[]
-            for footer in paragraph.get_footer():
-                translated_text = self.translate_text(footer.get_text(), self.target_language_key)
-                translated_footer.append(Footer(text= translated_text, font_size=footer.get_font_size()))
-            paragraph.set_footers(translated_footer)
+            if paragraph.get_footer():
+                translated_footer=[]
+                for footer in paragraph.get_footer():
+                    translated_text = self.translate_text(footer.get_text(), self.target_language_key)
+                    translated_footer.append(Footer(text= translated_text, font_size=footer.get_font_size()))
+                paragraph.set_footers(translated_footer)
 
-        if paragraph.get_chapter():
-            translated_text = self.translate_text(paragraph.get_chapter(), self.target_language_key)
-            paragraph.set_chapter(translated_text)
+            if paragraph.get_chapter():
+                translated_text = self.translate_text(paragraph.get_chapter(), self.target_language_key)
+                paragraph.set_chapter(translated_text)
 
-        if paragraph.get_volume():
-            translated_text = self.translate_text(paragraph.get_volume(), self.target_language_key)
-            paragraph.set_volume(translated_text)
+            if paragraph.get_volume():
+                translated_text = self.translate_text(paragraph.get_volume(), self.target_language_key)
+                paragraph.set_volume(translated_text)
+        except Exception as e:
+            logger.error(f'Error translating paragraph: {paragraph}: {e}')
 
         return paragraph
 
-    def _add_chapter(self, paragraphs, drawings):
-        pass
+    def translate_table(self, table: Table):
+        logger.info(f'Translate Table: {table}')
+        try:
+            if table.get_title().get_text():
+                title_line = table.get_title()
+                text = title_line.get_text().lower()
+
+                translated_text = self.translate_text(text, self.target_language_key)
+                logger.info(f'Translated Text: {translated_text}')
+                title_line.set_text(translated_text)
+
+            if table.get_sub_title().get_text():
+                sub_title_line = table.get_sub_title()
+                text = sub_title_line.get_text().lower()
+
+                translated_text = self.translate_text(text, self.target_language_key)
+                logger.info(f'Translated Text: {translated_text}')
+                sub_title_line.set_text(translated_text)
+
+            if table.get_columns():
+                for column in table.get_columns():
+                    for row in column:
+                        text = row.get_text().lower()
+                        cleaned_text = self.remove_consecutive_dots(text)
+
+                        translated_text = self.translate_text(cleaned_text, self.target_language_key)
+                        logger.info(f'Translated Text: {translated_text}')
+                        row.set_text(translated_text)
+        except Exception as e:
+            logger.error(f'Error translating table:{table}: {e}')
+
+        return table
+
+    @staticmethod
+    def remove_consecutive_dots(text):
+        cleaned = re.sub(r'\.{3,}', '', text)
+        return cleaned
 
     @staticmethod
     def remove_angle_brackets(text: str) -> str:
@@ -308,30 +350,48 @@ class PDFTranslator:
                 return True
         return False
 
-    def process_pdf(self, input_folder_path: str,output_folder_path: str):
-        docx_doc = Document()
+    def process_pdf(self, input_folder_path: str, output_folder_path: str):
+        try:
+            files = [
+                f for f in os.listdir(input_folder_path)
+                if f.lower().endswith(".pdf")
+            ]
 
-        document_processor = DocumentProcessor(input_folder_path, self.language_config)
-        document_processor.process_document()
+            def process_file(filename):
+                try:
+                    file_path = os.path.join(input_folder_path, filename)
+                    logger.info(f'Processing file: {file_path}')
 
-        paragraphs = document_processor.get_paragraphs()
-        self.logger.info(f'Paragraphs: {paragraphs}')
+                    docx_doc = Document()
+                    document_processor = DocumentProcessor(file_path, self.language_config)
+                    document_processor.process_document()
 
-        document_builder = DocumentBuilder(document=docx_doc ,language_config= self.language_config, document_processor=document_processor)
+                    elements = document_processor.get_elements()
+                    document_builder = DocumentBuilder(document=docx_doc, language_config=self.language_config, document_processor=document_processor)
 
-        translated_paragraphs = []
-        for paragraph in paragraphs:
-            translated_para = self.translate_preserve_styles(paragraph, document_processor)
-            self.logger.info(f'Translated Paragraph: {translated_para}')
-            translated_paragraphs.append(translated_para)
+                    for element in elements:
+                        if isinstance(element, Paragraph):
+                            self.translate_paragraph(element, document_processor)
+                        elif isinstance(element, Table):
+                            self.translate_table(element)
 
-        document_builder.build_document(paragraphs)
+                    document_builder.build_document(elements)
 
-        self.logger.info(f'Total Sections: {len(docx_doc.sections)}')
+                    target_folder = os.path.join(output_folder_path, self.language_config.get_target_language())
+                    os.makedirs(target_folder, exist_ok=True)
+                    base_name = os.path.splitext(filename)[0]
+                    docx_path = os.path.join(target_folder, f"{base_name}.docx")
+                    docx_doc.save(docx_path)
+                    logger.info(f'Translated document saved: {docx_path}')
+                except Exception as e:
+                    logger.error(f'Error processing file {filename}: {e}')
 
-        file_name = os.path.splitext(os.path.basename(input_folder_path))[0]
-        output_docx_path = os.path.join(output_folder_path,"{}.docx".format(file_name + '_' + self.language_config.get_target_language()))
-        docx_doc.save(output_docx_path)
+            # Use threads to translate multiple PDFs at once
+            with ThreadPoolExecutor(max_workers=3) as executor:
+                executor.map(process_file, files)
+
+        except Exception as e:
+            logger.error(f"Error in process_pdf for folder {input_folder_path}: {e}")
 
             # TODO:
             # 2. HANDLE TABLES

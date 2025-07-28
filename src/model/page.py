@@ -1,23 +1,26 @@
-import fitz
 import re
-import string
+from dataclasses import dataclass, field
+from typing import List
+import logging
+
+import fitz
 
 from src.model.drawing import Drawing
-from src.model.span import Span
-from src.model.header import Header
+from src.model.element import Element
 from src.model.footer import Footer
+from src.model.header import Header
+from src.model.line import Line, TableLine
 from src.model.paragraph import Paragraph
-from src.model.line import Line
+from src.model.table import Table
 
-from dataclasses import dataclass, field
-from typing import List, Dict
-
+logger = logging.getLogger(__name__)
 @dataclass
 class Page:
     number: int = field(default_factory=int)
-    spans: List[Span]  = field(default_factory=list, repr=False)
     lines: List[Line] = field(default_factory=list, repr = False)
-    paragraphs: List[Paragraph] = field(default_factory=list)
+    elements: List[Element] = field(default_factory=list)
+    paragraphs: List[Paragraph] = field(default_factory=list, repr=False)
+    tables: List[Table]  = field(default_factory=list, repr=False)
     headers: List[Header] = field(default_factory=list)
     footers: List[Footer] = field(default_factory=list)
     drawings: List[Drawing] = field(default_factory=list)
@@ -30,6 +33,7 @@ class Page:
     target_language: str = field(default_factory=str, repr=False)
     extracted_page_number: str = field(default_factory=str)
     line_spacing: int = field(default_factory=int)
+    is_content_table: bool = field(default_factory=bool)
 
     def _get_footer_line_y(self):
         """Returns the Y position of a full-width horizontal line if detected."""
@@ -74,15 +78,20 @@ class Page:
         paragraph.set_end(para_bbox.x1)
         return paragraph
 
-
-    def add_span(self, span):
-        self.spans.append(span)
-
     def add_line(self, line):
         self.lines.append(line)
 
+    def add_element(self, element):
+        self.elements.append(element)
+
+    def add_elements(self, elements):
+        self.elements.extend(elements)
+
     def add_paragraph(self, para):
         self.paragraphs.append(para)
+
+    def add_table(self, table):
+        self.tables.append(table)
 
     def add_drawings(self, drawing):
         self.drawings.extend(drawing)
@@ -107,6 +116,15 @@ class Page:
 
     def set_extracted_page_number(self, extracted_page_number):
         self.extracted_page_number = extracted_page_number
+
+    def set_line_spacing(self, line_spacing):
+        self.line_spacing = line_spacing
+
+    def set_is_content_table(self, is_content_table):
+        self.is_content_table = is_content_table
+
+    def get_is_content_table(self):
+        return self.is_content_table
 
     def get_extracted_page_number(self):
         return self.extracted_page_number
@@ -147,6 +165,12 @@ class Page:
     def get_line_spacing(self):
         return self.line_spacing
 
+    def get_tables(self):
+        return self.tables
+
+    def get_elements(self):
+        return self.elements
+
     def compute_content_dimensions(self):
         self.content_width = self.max_x - self.min_x
         self.content_height = self.max_y - self.min_y
@@ -156,7 +180,7 @@ class Page:
         current_line = None
 
         for line in self.lines:
-            if not line.get_text():
+            if not line.get_text() or isinstance(line, TableLine):
                 continue
 
             is_new_line = (current_line is None or abs(line.get_line_bbox().y1 - current_line.get_line_bbox().y1) >1)
@@ -185,18 +209,20 @@ class Page:
 
         self.lines = lines
 
-    def group_by_paragraphs(self):
+        return lines
+
+    def group_by_paragraphs(self, lines):
         """Group text lines into paragraphs based on vertical proximity.
         Stores the result in self.paragraphs.
         """
         paragraphs = []
         current_lines = []
 
-        for i, line in enumerate(self.lines):
+        for i, line in enumerate(lines):
             is_new_para = (
                     i > 0 and (
-                    line.get_page_number() != self.lines[i - 1].get_page_number() or
-                    line.get_line_bbox().y0 - self.lines[i-1].get_line_bbox().y1>self.line_spacing
+                    line.get_page_number() != lines[i - 1].get_page_number() or
+                    line.get_line_bbox().y0 - lines[i-1].get_line_bbox().y1>self.line_spacing
             )
             )
 
@@ -213,7 +239,10 @@ class Page:
 
         self.paragraphs = paragraphs
 
-    def separate_content(self):
+        self.add_elements(paragraphs)
+        # self.elements.extend(paragraphs)
+
+    def separate_content(self, lines):
         footer_start = self._get_footer_line_y()
 
         def is_footer_by_line(line_obj):
@@ -235,7 +264,7 @@ class Page:
         footers = []
         headers = []
 
-        for line in self.lines:
+        for line in lines:
             if is_footer_by_line(line) or is_footer_by_position(line):
                 footers.append(line)
             elif is_header_by_position(line):
@@ -277,17 +306,20 @@ class Page:
 
         self.footers = new_footers
 
-    def find_line_spacing(self):
+    @staticmethod
+    def find_line_spacing(lines):
         line_spacing = 0
 
-        for i,line in enumerate(self.lines):
+        if not lines:
+            return line_spacing
+
+        for i,line in enumerate(lines):
               if i>0:
-                  line_spacing += line.get_line_bbox().y0-self.lines[i-1].get_line_bbox().y1
+                  line_spacing += line.get_line_bbox().y0-lines[i-1].get_line_bbox().y1
 
+        line_spacing = line_spacing/len(lines)
 
-        line_spacing = line_spacing/len(self.lines)
-        self.line_spacing = line_spacing
-
+        return line_spacing
 
     def process_header(self, headers):
         if not headers:
@@ -305,60 +337,16 @@ class Page:
         self.headers = new_headers
 
     # SEGREGATE HEADER, FOOTER AND MAIN CONTENT
-    def process_lines(self):
-        new_lines, headers, footers = self.separate_content()
+    def process_lines(self, lines):
+        new_lines, headers, footers = self.separate_content(lines)
 
-        self.lines = new_lines
         self.process_header(headers)
         self.process_footer(footers)
 
-    def normalize_spans(self):
-        normalized = []
-        prev_span = None
-        punctuation_set = set(string.punctuation + '’‘“”—–')  # common typographic symbols
+        return new_lines
 
-        for span in self.spans:
-            if not span.get_text():
-                continue
-
-            text = span.get_text().strip()
-            is_punctuation = all(char in punctuation_set for char in text)
-
-            is_new_line = (
-                    not prev_span or
-                    abs(span.get_bbox().y1 - prev_span.get_bbox().y1) > 1.0
-            )
-
-            if is_new_line:
-                if prev_span:
-                    normalized.append(prev_span)
-                prev_span = span
-                continue
-
-            if is_punctuation:
-                prev_span.set_text("{0}{1}".format(prev_span.get_text(), span.get_text()))
-                prev_span.get_bbox().x1 = span.get_bbox().x1
-                continue
-
-            x_gap = span.get_bbox().x0 - prev_span.get_bbox().x1
-
-            if span.get_font_size() < prev_span.get_font_size():
-                if x_gap <= 1.0:
-                    prev_span.set_text("{0}{1}".format(prev_span.get_text(), span.get_text()))
-                else:
-                    prev_span.set_text("{0} {1}".format(prev_span.get_text(), span.get_text()))
-                prev_span.get_bbox().x1 = span.get_bbox().x1
-            else:
-                normalized.append(prev_span)
-                prev_span = span
-
-        if prev_span:
-            normalized.append(prev_span)
-
-        self.spans = normalized
-
-    def fix_punctuation_spacing(self):
-        for line in self.lines:
+    def fix_punctuation_spacing(self, lines):
+        for line in lines:
             text = line.get_text()
 
             # Match abbreviations like B.N., c.i.e., H. V. R. (with optional space between)
@@ -409,15 +397,16 @@ class Page:
             if footer_text.isdigit():
                 continue
 
-            for paragraph in self.paragraphs:
-                if self._footer_already_mapped(paragraph, footer_text):
+            for element in self.get_elements():
+                if isinstance(element, Table) or  (isinstance(element, Paragraph) and self._footer_already_mapped(element, footer_text)):
                     continue
 
-                for line in paragraph.get_lines():
-                    normalized_line = line.get_text().strip().lower()
-                    if normalized_prefix in normalized_line:
-                        paragraph.add_footers(footer)
-                        break  # Avoid mapping the same footer multiple times to one paragraph
+                if isinstance(element, Paragraph):
+                    for line in element.get_lines():
+                        normalized_line = line.get_text().strip().lower()
+                        if normalized_prefix in normalized_line:
+                            element.add_footers(footer)
+                            break  # Avoid mapping the same footer multiple times to one paragraph
 
     @staticmethod
     def _footer_already_mapped(paragraph, footer_text: str) -> bool:
@@ -440,12 +429,163 @@ class Page:
         prefix = self.extract_prefix(text)
         return bool(re.search(r'[^A-Za-z\s]', prefix))
 
+    @staticmethod
+    def is_page_number(text):
+        # Strip leading/trailing whitespace
+        text = text.strip()
+
+        # Match single page numbers: e.g., "1", "55"
+        if re.fullmatch(r"\d{1,3}", text):
+            return True
+
+        # Match page ranges: "1-2", "1—2", "55—56", etc.
+        if re.fullmatch(r"\d{1,3}[\-—–]\d{1,3}", text):
+            return True
+
+        return False
+
+    def merge_lines(self, lines, line_spacing):
+
+        # line_spacing = self.avg_line_spacing(lines)
+        logger.info(f'Line Spacing: {line_spacing}')
+
+        new_lines = []
+
+        current_lines = []
+
+        for i, line in enumerate(lines):
+            is_new_line = (i>0 and (line.get_line_bbox().y0-lines[i-1].get_line_bbox().y1)>line_spacing)
+
+            if is_new_line and current_lines:
+                line_obj =  self._merge_lines(current_lines)
+                new_lines.append(line_obj)
+                current_lines = []
+
+            current_lines.append(line)
+
+        if current_lines:
+            line_obj = self._merge_lines(current_lines)
+            new_lines.append(line_obj)
+
+        return new_lines
+
+    @staticmethod
+    def _merge_lines(lines):
+        line_text = ""
+        for i, line in enumerate(lines):
+            text = line.get_text().strip()
+
+            if text.endswith("-"):
+                # Remove the hyphen and don't add space
+                line_text += text[:-1]
+            else:
+                # Add text and a space after it (unless it's the last line)
+                line_text += text
+                if i != len(lines) - 1:
+                    line_text += " "
+
+        font_size = lines[-1].get_font_size()
+
+        x0 = lines[0].get_line_bbox().x0
+        y0 = lines[0].get_line_bbox().y0
+        x1 = lines[-1].get_line_bbox().x1
+        y1 = lines[-1].get_line_bbox().y1
+        line_bbox = fitz.Rect(x0, y0, x1, y1)
+
+        line = Line(text=line_text, font_size=font_size, line_bbox=line_bbox)
+
+        return line
+
+    def process_contents_table(self, center, left_column, right_column):
+        filtered_left_column = [line for line in left_column if not self.is_page_number(line.text)]
+        filtered_right_column = [line for line in right_column if not self.is_page_number(line.text)]
+
+        center = self.merge_lines(center, 0)
+        left_column = self.merge_lines(filtered_left_column, self.find_line_spacing(filtered_left_column))
+        right_column = self.merge_lines(filtered_right_column, self.find_line_spacing(filtered_right_column))
+
+        table =  Table()
+        for line in center:
+            text = line.get_text()
+
+            if self.is_roman_numeral(text):
+                footer = Footer(text, line.get_font_size())
+                table.set_page_number(footer)
+                continue
+
+            if not table.get_title().get_text():
+                table.set_title(line)
+            else:
+                table.set_sub_title(line)
+
+        table.add_column(left_column)
+        table.add_column(right_column)
+        table.set_is_content_table(True)
+
+        logger.info(f'Table of Content: {table}')
+
+        return table
+
+    @staticmethod
+    def is_roman_numeral(text):
+        """
+        Check if text is a Roman numeral (including wrapped in brackets/parentheses).
+        """
+        cleaned = re.sub(r'[^a-zA-Z]', '', text.strip().upper())
+
+        if not cleaned:  # guard against empty strings
+            return False
+
+        pattern = r'^M{0,3}(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})$'
+        return bool(re.fullmatch(pattern, cleaned))
+
+    def extract_contents_table(self):
+        all_x_0 = [line.get_line_bbox().x0 for line in self.lines if isinstance(line, TableLine)]
+        all_x_1 = [line.get_line_bbox().x1 for line in self.lines if isinstance(line, TableLine)]
+
+        min_x = min(all_x_0)
+        max_x = max(all_x_1)
+        mid_x = (min_x + max_x) / 2
+
+        center = []
+        left_column = []
+        right_column = []
+
+        for line in self.lines:
+            if isinstance(line,TableLine):
+                line_bbox = line.get_line_bbox()
+                left_indent = int(line_bbox.x0) - int(min_x)
+                right_indent = int(max_x) - int(line_bbox.x1)
+                is_centered = abs(left_indent - right_indent) <= 1
+
+                if is_centered and left_indent != 0 and right_indent != 0:
+                    center.append(line)
+                elif line_bbox.x0 < mid_x:
+                    left_column.append(line)
+                elif line_bbox.x0 >= mid_x:
+                    right_column.append(line)
+
+        if left_column and right_column:
+            left_column = sorted(left_column, key=lambda l: l.get_line_bbox().y0)
+            right_column = sorted(right_column, key=lambda l: l.get_line_bbox().y0)
+
+            logger.info(f'Center: {center}')
+            logger.info(f'Left Column: {left_column}')
+            logger.info(f'Right Column: {right_column}')
+
+            table = self.process_contents_table(center, left_column, right_column)
+            self.add_element(table)
+
+
     def process_page(self):
-        self.group_lines()
-        self.fix_punctuation_spacing()
-        self.process_lines()
-        self.find_line_spacing()
-        self.group_by_paragraphs()
-        self.compute_content_dimensions()
-        self.map_footers_to_paragraphs()
-        self.extract_page_number()
+        if self.is_content_table:
+            self.extract_contents_table()
+        else:
+            lines = self.group_lines()
+            self.fix_punctuation_spacing(lines)
+            lines = self.process_lines(lines)
+            self.set_line_spacing(self.find_line_spacing(lines))
+            self.group_by_paragraphs(lines)
+            self.compute_content_dimensions()
+            self.map_footers_to_paragraphs()
+            self.extract_page_number()

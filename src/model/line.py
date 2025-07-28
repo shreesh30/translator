@@ -38,3 +38,8 @@ class Line:
 
     def get_font_size(self):
         return self.font_size
+
+
+@dataclass
+class TableLine(Line):
+    pass
