@@ -8,7 +8,7 @@ import fitz
 class Line:
     page_number: int = field(default_factory=int, repr=False)
     text: str = ""
-    line_bbox: fitz.Rect = field(default_factory=fitz.Rect)
+    line_bbox: fitz.Rect = field(default_factory=lambda: fitz.Rect(0, 0, 0, 0))
     origin: Tuple[float, float]  = field(default_factory=tuple)
     font_size: float = field(default_factory=int, repr=True)
 

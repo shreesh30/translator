@@ -6,7 +6,7 @@ import fitz
 @dataclass
 class Drawing:
     page_number: int = field(default_factory=int)
-    bbox:fitz.Rect = field(default_factory=fitz.Rect)
+    bbox:fitz.Rect = field(default_factory=lambda: fitz.Rect(0, 0, 0, 0))
 
     def set_page_number(self, page_number):
         self.page_number = page_number

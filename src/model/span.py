@@ -10,7 +10,7 @@ class Span:
     font_size: float = field(default_factory=float, repr=False)
     page_num: int = field(default_factory=float, repr=False)
     origin: tuple = field(default_factory=tuple, repr=True)
-    bbox: fitz.Rect = field(default_factory=fitz.Rect, repr=True)
+    bbox: fitz.Rect = field(default_factory=lambda: fitz.Rect(0, 0, 0, 0), repr=True)
 
     def set_text(self, text):
         self.text = text
