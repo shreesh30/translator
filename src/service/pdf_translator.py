@@ -51,9 +51,9 @@ class PDFTranslator:
         sys.stderr.reconfigure(encoding='utf-8')
 
         self.quantization = quantization
-        with PDFTranslator.GPU_LOCK:
-            self.tokenizer= self.initialize_tokenizer(self.CKPT_DIR)
-            self.model = self.initialize_model(self.CKPT_DIR)
+
+        self.tokenizer= self.initialize_tokenizer(self.CKPT_DIR)
+        self.model = self.initialize_model(self.CKPT_DIR)
         self.processor = IndicProcessor(inference=True)
         # self.config = AutoConfig.from_pretrained(self.CKPT_DIR)
         self.language_config = lang_config
@@ -106,6 +106,7 @@ class PDFTranslator:
         model = AutoModelForSeq2SeqLM.from_pretrained(
             ckpt_dir,
             trust_remote_code=True,
+            quantization_config=qconfig
         )
 
         if qconfig is None:
