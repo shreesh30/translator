@@ -387,7 +387,7 @@ class PDFTranslator:
                     logger.error(f'Error processing file {filename}: {e}')
 
             # Use threads to translate multiple PDFs at once
-            with ThreadPoolExecutor(max_workers=3) as executor:
+            with ThreadPoolExecutor(max_workers=6) as executor:
                 executor.map(process_file, files)
 
         except Exception as e:
