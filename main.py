@@ -14,6 +14,9 @@ from multiprocessing import Process, Lock
 
 def setup_console_logging(log_file_path='logs/output.log'):
     """Configure logging to print to console and save to a file."""
+    # Ensure the log directory exists
+    os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
+
     # Clear existing handlers if re-running the setup
     for handler in logging.root.handlers[:]:
         logging.root.removeHandler(handler)
@@ -28,7 +31,6 @@ def setup_console_logging(log_file_path='logs/output.log'):
     )
 
 def translate_for_language(lang_config: LanguageConfig, input_path: str, output_path: str, gpu_lock: Lock):
-    os.makedirs("logs", exist_ok=True)
     setup_console_logging()
     try:
         logging.info(f"Starting translation for: {lang_config.get_target_language()}")
