@@ -34,7 +34,7 @@ def translate_for_language(lang_config: LanguageConfig, input_path: str, output_
     setup_console_logging()
     try:
         logging.info(f"Starting translation for: {lang_config.get_target_language()}")
-        translator = PDFTranslator(lang_config)
+        translator = PDFTranslator(lang_config, quantization="8-bit")
         # Inject the shared lock into the class (if needed)
         PDFTranslator.GPU_LOCK = gpu_lock
         translator.process_pdf(input_folder_path=input_path, output_folder_path=output_path)
@@ -92,15 +92,15 @@ if __name__ == "__main__":
         # LanguageConfig(target_language="Dogri", target_language_key="doi_Deva",
         #                target_font_path="resource/fonts/SakalBharati_N_Ship.ttf", font_size_multiplier=1.1,
         #                line_spacing_multiplier=1.25),
-        LanguageConfig(target_language="Gujarati", target_language_key="guj_Gujr",
-                       target_font_path="resource/fonts/GJOTAvantika_N_Ship.ttf", font_size_multiplier=1.1,
-                       line_spacing_multiplier=1.25),
+        # LanguageConfig(target_language="Gujarati", target_language_key="guj_Gujr",
+        #                target_font_path="resource/fonts/GJOTAvantika_N_Ship.ttf", font_size_multiplier=1.1,
+        #                line_spacing_multiplier=1.25),
         # LanguageConfig(target_language="Malayalam", target_language_key="mal_Mlym",
         #                target_font_path="resource/fonts/MLOT-Karthika_N_Ship.ttf", font_size_multiplier=1.1,
         #                line_spacing_multiplier=1.25),
-        LanguageConfig(target_language="Marathi", target_language_key="mar_Deva",
-                       target_font_path="resource/fonts/Sakal Marathi Normal_Ship.ttf", font_size_multiplier=1.1,
-                       line_spacing_multiplier=1.25),
+        # LanguageConfig(target_language="Marathi", target_language_key="mar_Deva",
+        #                target_font_path="resource/fonts/Sakal Marathi Normal_Ship.ttf", font_size_multiplier=1.1,
+        #                line_spacing_multiplier=1.25),
         # LanguageConfig(target_language="Punjabi", target_language_key="pan_Guru",
         #                target_font_path="resource/fonts/PNOTAmar_N_Ship.ttf", font_size_multiplier=1.1,
         #                line_spacing_multiplier=1.25),

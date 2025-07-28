@@ -51,11 +51,11 @@ class PDFTranslator:
         sys.stderr.reconfigure(encoding='utf-8')
 
         self.quantization = quantization
-        self.tokenizer= self.initialize_tokenizer(self.CKPT_DIR)
+        with PDFTranslator.GPU_LOCK:
+            self.tokenizer= self.initialize_tokenizer(self.CKPT_DIR)
+            self.model = self.initialize_model(self.CKPT_DIR)
         self.processor = IndicProcessor(inference=True)
         # self.config = AutoConfig.from_pretrained(self.CKPT_DIR)
-        self.model = self.initialize_model(self.CKPT_DIR)
-
         self.language_config = lang_config
         self.target_language = self.language_config.get_target_language()
         self.target_language_key = self.language_config.get_target_language_key()
