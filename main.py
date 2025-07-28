@@ -48,7 +48,7 @@ if __name__ == "__main__":
     # input_pdf_path = "resource/input/cad_09-12-1946_pages_16_to_23.pdf"               # Replace with your file
     # input_pdf_path = "resource/input/original-doc-16-17.pdf"               # Replace with your file
     # input_pdf_path = "resource/input/table-1.pdf"               # Replace with your file
-    input_pdf_path = "resource/pdf"               # Replace with your file
+    input_pdf_path = "resource/input/pdf"               # Replace with your file
     # input_pdf_path = "resource/input/table-2-page.pdf"               # Replace with your file
     # input_pdf_path = "resource/input/cad_04-11-1948.pdf.DEBATE 48.pdf"               # Replace with your file
     # input_pdf_path = "resource/input/preface-og.pdf"               # Replace with your file
@@ -76,9 +76,9 @@ if __name__ == "__main__":
         LanguageConfig(target_language="Gujarati", target_language_key="guj_Gujr",
                        target_font_path="resource/fonts/GJOTAvantika_N_Ship.ttf", font_size_multiplier=1.1,
                        line_spacing_multiplier=1.25),
-        LanguageConfig(target_language="Malayalam", target_language_key="mal_Mlym",
-                       target_font_path="resource/fonts/MLOT-Karthika_N_Ship.ttf", font_size_multiplier=1.1,
-                       line_spacing_multiplier=1.25),
+        # LanguageConfig(target_language="Malayalam", target_language_key="mal_Mlym",
+        #                target_font_path="resource/fonts/MLOT-Karthika_N_Ship.ttf", font_size_multiplier=1.1,
+        #                line_spacing_multiplier=1.25),
         LanguageConfig(target_language="Marathi", target_language_key="mar_Deva",
                        target_font_path="resource/fonts/Sakal Marathi Normal_Ship.ttf", font_size_multiplier=1.1,
                        line_spacing_multiplier=1.25),
@@ -88,9 +88,9 @@ if __name__ == "__main__":
         # LanguageConfig(target_language="Kannada", target_language_key="kan_Knda",
         #                target_font_path="resource/fonts/SakalBharati_N_Ship.ttf", font_size_multiplier=1.1,
         #                line_spacing_multiplier=1.25),
-        LanguageConfig(target_language="Assamese", target_language_key="asm_Beng",
-                       target_font_path="resource/fonts/SakalBharati_N_Ship.ttf", font_size_multiplier=1.1,
-                       line_spacing_multiplier=1.25),
+        # LanguageConfig(target_language="Assamese", target_language_key="asm_Beng",
+        #                target_font_path="resource/fonts/SakalBharati_N_Ship.ttf", font_size_multiplier=1.1,
+        #                line_spacing_multiplier=1.25),
         # LanguageConfig(target_language="Bodo", target_language_key="brx_Deva",
         #                target_font_path="resource/fonts/SakalBharati_N_Ship.ttf", font_size_multiplier=1.1,
         #                line_spacing_multiplier=1.25),
@@ -115,9 +115,9 @@ if __name__ == "__main__":
         # LanguageConfig(target_language="Telugu", target_language_key="tel_Telu",
         #                target_font_path="resource/fonts/SakalBharati_N_Ship.ttf", font_size_multiplier=1.1,
         #                line_spacing_multiplier=1.25),
-        LanguageConfig(target_language="Urdu", target_language_key="urd_Arab",
-                       target_font_path="resource/fonts/UROT-Ghalib_N_Ship.ttf", font_size_multiplier=1.1,
-                       line_spacing_multiplier=1.25, right_to_left=True),
+        # LanguageConfig(target_language="Urdu", target_language_key="urd_Arab",
+        #                target_font_path="resource/fonts/UROT-Ghalib_N_Ship.ttf", font_size_multiplier=1.1,
+        #                line_spacing_multiplier=1.25, right_to_left=True),
         # LanguageConfig(target_language="Kashmiri", target_language_key="kas_Arab",
         #                target_font_path="resource/fonts/UROT-Ghalib_N_Ship.ttf", font_size_multiplier=1.1,
         #                line_spacing_multiplier=1.25, right_to_left=True)
