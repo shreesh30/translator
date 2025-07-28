@@ -1,17 +1,34 @@
 import logging
+import os
 
 from src.model.language_config import LanguageConfig
 from src.service.pdf_translator import PDFTranslator
 from multiprocessing import Process, Lock
 
-def setup_console_logging():
-    """Configure logging to print only to console."""
+# def setup_console_logging():
+#     """Configure logging to print only to console."""
+#     logging.basicConfig(
+#         level=logging.INFO,  # Set default level (INFO or DEBUG)
+#         format='%(name)s - %(levelname)s - %(message)s',
+#     )
+
+def setup_console_logging(log_file_path='logs/output.log'):
+    """Configure logging to print to console and save to a file."""
+    # Clear existing handlers if re-running the setup
+    for handler in logging.root.handlers[:]:
+        logging.root.removeHandler(handler)
+
     logging.basicConfig(
-        level=logging.INFO,  # Set default level (INFO or DEBUG)
-        format='%(name)s - %(levelname)s - %(message)s',
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(),  # Console output
+            logging.FileHandler(log_file_path)  # File output
+        ]
     )
 
 def translate_for_language(lang_config: LanguageConfig, input_path: str, output_path: str, gpu_lock: Lock):
+    os.makedirs("logs", exist_ok=True)
     setup_console_logging()
     try:
         logging.info(f"Starting translation for: {lang_config.get_target_language()}")
