@@ -4,6 +4,7 @@ import os
 from src.model.language_config import LanguageConfig
 from src.service.pdf_translator import PDFTranslator
 from multiprocessing import Process, Lock
+import multiprocessing as mp
 
 # def setup_console_logging():
 #     """Configure logging to print only to console."""
@@ -147,4 +148,5 @@ if __name__ == "__main__":
     # for lang_config in language_configs:
     #     pdf_translator = PDFTranslator(lang_config)
     #     pdf_translator.process_pdf(input_folder_path=input_pdf_path, output_folder_path='resource/output')
+    mp.set_start_method("spawn", force=True)
     run_parallel_translation(language_configs, input_pdf_path, output_pdf_path)
