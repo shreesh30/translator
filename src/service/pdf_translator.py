@@ -88,34 +88,45 @@ class PDFTranslator:
         return tokenizer
 
     def initialize_model(self, ckpt_dir):
-        if self.quantization == "4-bit":
-            qconfig = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_use_double_quant=True,
-                bnb_4bit_compute_dtype=torch.bfloat16,
+        try:
+            if self.quantization == "4-bit":
+                qconfig = BitsAndBytesConfig(
+                    load_in_4bit=True,
+                    bnb_4bit_use_double_quant=True,
+                    bnb_4bit_compute_dtype=torch.bfloat16,
+                )
+            elif self.quantization == "8-bit":
+                qconfig = BitsAndBytesConfig(
+                    load_in_8bit=True,
+                    bnb_8bit_use_double_quant=True,
+                    bnb_8bit_compute_dtype=torch.bfloat16,
+                )
+            else:
+                qconfig = None
+
+            model = AutoModelForSeq2SeqLM.from_pretrained(
+                ckpt_dir,
+                trust_remote_code=True,
+                quantization_config=qconfig
             )
-        elif self.quantization == "8-bit":
-            qconfig = BitsAndBytesConfig(
-                load_in_8bit=True,
-                bnb_8bit_use_double_quant=True,
-                bnb_8bit_compute_dtype=torch.bfloat16,
+            logger.info("Loaded model with BitsAndBytes quantization.")
+        except Exception as e:
+            logger.warning(f"Quantization failed ({e}), falling back to standard FP16/FP32")
+            model = AutoModelForSeq2SeqLM.from_pretrained(
+                ckpt_dir,
+                trust_remote_code=True
             )
+
+        # Always move to GPU if available
+        if torch.cuda.is_available():
+            model = model.to("cuda")
+            model.half()
+            logger.info("Model is running on GPU (FP16).")
         else:
-            qconfig = None
-
-        model = AutoModelForSeq2SeqLM.from_pretrained(
-            ckpt_dir,
-            trust_remote_code=True,
-            quantization_config=qconfig
-        )
-
-        if qconfig is None:
-            model = model.to(self.DEVICE)
-            if self.DEVICE == "cuda":
-                model.half()
+            model = model.to("cpu")
+            logger.info("Model is running on CPU.")
 
         model.eval()
-
         return model
 
 
