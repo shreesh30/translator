@@ -100,34 +100,37 @@ class PDFTranslator:
                     load_in_8bit=True,
                     bnb_8bit_use_double_quant=True,
                     bnb_8bit_compute_dtype=torch.bfloat16,
+                    bnb_8bit_quant_type="nf8",  # safe default
                 )
             else:
                 qconfig = None
-
+    
             model = AutoModelForSeq2SeqLM.from_pretrained(
                 ckpt_dir,
                 trust_remote_code=True,
                 quantization_config=qconfig
             )
-            logger.info("Loaded model with BitsAndBytes quantization.")
+    
+            if qconfig is None:
+                model = model.to(self.DEVICE)
+                if self.DEVICE == "cuda":
+                    model.half()
+    
+            model.eval()
+            logger.info("Loaded model%s" % (" with BitsAndBytes quantization." if qconfig else ""))
+            return model
+    
         except Exception as e:
-            logger.warning(f"Quantization failed ({e}), falling back to standard FP16/FP32")
+            logger.error(f"Quantized load failed: {e}. Falling back to fp16 on {self.DEVICE}")
             model = AutoModelForSeq2SeqLM.from_pretrained(
                 ckpt_dir,
                 trust_remote_code=True
             )
-
-        # Always move to GPU if available
-        if torch.cuda.is_available():
-            model = model.to("cuda")
-            model.half()
-            logger.info("Model is running on GPU (FP16).")
-        else:
-            model = model.to("cpu")
-            logger.info("Model is running on CPU.")
-
-        model.eval()
-        return model
+            model = model.to(self.DEVICE)
+            if self.DEVICE == "cuda":
+                model.half()
+            model.eval()
+            return model
 
 
     def translate_text(self, text: str, tgt_lang: str) -> str:
