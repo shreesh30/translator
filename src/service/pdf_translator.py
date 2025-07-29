@@ -156,7 +156,8 @@ class PDFTranslator:
                         repetition_penalty=1.1,
                         do_sample=True,
                         temperature = 0.7,
-                        no_repeat_ngram_size=3
+                        no_repeat_ngram_size=3,
+                        use_cache = False
                     )
 
                 logger.debug(f"Generated Token IDs: {output}")
