@@ -52,7 +52,7 @@ class PDFProcessor:
         })
 
         try:
-            return result_queue.get(timeout=30.0)
+            return result_queue.get()
         except queue.Empty:
             logger.error("Timeout waiting for translation result")
             return ""
