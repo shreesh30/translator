@@ -23,10 +23,6 @@ def setup_console_logging(log_file_path='logs/output.log'):
         ]
     )
 
-
-set_start_method('spawn', force=True)  # Critical for CUDA compatibility
-
-
 def run_pipeline(lang_configs: List[LanguageConfig], input_path: str, output_path: str):
     """Optimal parallel processing with 1 GPU worker + multi-threaded CPU workers"""
     # 1. Create communication queues in main process
@@ -83,6 +79,8 @@ def process_language(config, input_path, output_path, task_queue, result_queue):
 
 
 if __name__ == "__main__":
+    set_start_method('spawn', force=True)  # Critical for CUDA compatibility
+    
     setup_console_logging()
     input_pdf_path = "resource/input/pdf"               # Replace with your file
     # input_pdf_path = "resource/tmp"               # Replace with your file
