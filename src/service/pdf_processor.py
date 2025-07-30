@@ -1,5 +1,6 @@
 import logging
 import os
+import queue
 import re
 from concurrent.futures import ThreadPoolExecutor
 from queue import Queue
@@ -39,15 +40,22 @@ class PDFProcessor:
         self.max_workers = max_workers
 
     def translate_text(self, text: str) -> str:
-        """Thread-safe translation request"""
-        result_queue = Queue()
+        """Simplified translation request using a new Queue per request"""
+        result_queue = Queue()  # New queue for each request
 
+        # Put task in queue
         self.gpu_task_queue.put({
-                'text': text,
-                'lang': self.lang_config.target_language_key,
-                'result_queue': result_queue
-            })
-        return result_queue.get()
+            'text': text,
+            'lang': self.lang_config.target_language_key,
+            'result_queue': result_queue  # Pass the queue directly
+        })
+
+        # Wait for result
+        try:
+            return result_queue.get(timeout=30.0)
+        except queue.Empty:
+            logger.error("Timeout waiting for translation result")
+            return ""
 
     def process_file(self, filename: str):
         """Process single PDF file"""
