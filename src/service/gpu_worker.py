@@ -26,6 +26,7 @@ class GPUWorker(Process):
         self.model = None
         self.processor = IndicProcessor(inference=True)
         self.tags = Utils.TAGS
+        self._gpu_lock = None
 
     def _init_model(self):
         """Initialize model with optimized settings"""
@@ -92,20 +93,22 @@ class GPUWorker(Process):
             ).to(self.model.device)
 
             # 3. Inference with GPU lock
-            with torch.inference_mode():
-                outputs = self.model.generate(
-                        **inputs,
-                        min_length=0,
-                        max_length=self.max_seq_length,
-                        num_beams=6,
-                        length_penalty=1.0,
-                        early_stopping=True,
-                        repetition_penalty=1.1,
-                        do_sample=True,
-                        temperature=0.7,
-                        no_repeat_ngram_size=3,
-                        use_cache=False
-                    )
+            # Use the in-process lock
+            with self._gpu_lock:
+                with torch.inference_mode():
+                    outputs = self.model.generate(
+                            **inputs,
+                            min_length=0,
+                            max_length=self.max_seq_length,
+                            num_beams=6,
+                            length_penalty=1.0,
+                            early_stopping=True,
+                            repetition_penalty=1.1,
+                            do_sample=True,
+                            temperature=0.7,
+                            no_repeat_ngram_size=3,
+                            use_cache=False
+                        )
 
             # 4. Decoding
             decoded = self.tokenizer.batch_decode(
@@ -130,6 +133,9 @@ class GPUWorker(Process):
 
     def run(self):
         """Main processing loop"""
+        import threading
+        self._gpu_lock = threading.Lock()
+
         torch.set_num_threads(1)  # Critical for stability
         self._init_model()
         logger.info("GPU worker ready")
