@@ -37,19 +37,17 @@ class PDFProcessor:
         self.input_path = input_path
         self.output_path = output_path
         self.max_workers = max_workers
-        self._lock = threading.Lock()
 
     def translate_text(self, text: str) -> str:
         """Thread-safe translation request"""
         result_queue = Queue()
 
-        with self._lock:  # Protect queue operations
-            self.gpu_task_queue.put({
+        self.gpu_task_queue.put({
                 'text': text,
                 'lang': self.lang_config.target_language_key,
                 'result_queue': result_queue
             })
-            return result_queue.get()
+        return result_queue.get()
 
     def process_file(self, filename: str):
         """Process single PDF file"""
