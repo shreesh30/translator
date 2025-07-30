@@ -1,4 +1,5 @@
 import logging
+import multiprocessing
 import os
 import queue
 import re
@@ -41,16 +42,15 @@ class PDFProcessor:
 
     def translate_text(self, text: str) -> str:
         """Simplified translation request using a new Queue per request"""
-        result_queue = Queue()  # New queue for each request
+        manager = multiprocessing.Manager()
+        result_queue = manager.Queue()
 
-        # Put task in queue
         self.gpu_task_queue.put({
             'text': text,
             'lang': self.lang_config.target_language_key,
-            'result_queue': result_queue  # Pass the queue directly
+            'result_queue': result_queue
         })
 
-        # Wait for result
         try:
             return result_queue.get(timeout=30.0)
         except queue.Empty:
