@@ -1,19 +1,24 @@
 import logging
 import os
+import re
 from concurrent.futures import ThreadPoolExecutor
 from queue import Queue
 from typing import List
 import threading
 
+from PIL.ImageFont import ImageFont
 from docx import Document
 
 from src.model.language_config import LanguageConfig
 from src.model.paragraph import Paragraph
 from src.model.line import Line
+from PIL import ImageFont
 from src.model.table import Table
 from src.service.document_builder import DocumentBuilder
 from src.service.document_processor import DocumentProcessor
 from IndicTransToolkit.processor import IndicProcessor
+
+from src.utils.utils import Utils
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +70,8 @@ class PDFProcessor:
                     if element.type == "paragraph":
                         futures.append(executor.submit(
                             self._translate_paragraph,
-                            element
+                            element,
+                            doc_processor
                         ))
                     elif element.type == "table":
                         futures.append(executor.submit(
@@ -78,12 +84,12 @@ class PDFProcessor:
                     future.result()
 
             # 3. Build output document
-            self._build_docx(elements, filename)
+            self._build_docx(elements, filename, doc_processor)
 
         except Exception as e:
             logger.error(f"Failed processing {filename}: {e}")
 
-    def _translate_paragraph(self, paragraph):
+    def _translate_paragraph(self, paragraph, doc_processor):
         """Translate paragraph content"""
         try:
             # Combine all lines for context-aware translation
@@ -91,12 +97,12 @@ class PDFProcessor:
             translated = self.translate_text(full_text)
 
             # Reconstruct lines with original formatting
-            lines = self._split_into_lines(translated, paragraph)
+            lines = self._split_into_lines(translated, paragraph, doc_processor)
             paragraph.set_lines(lines)
 
             # Process sub-paragraphs if any
             for sub_para in paragraph.get_sub_paragraphs():
-                self._translate_paragraph(sub_para)
+                self._translate_paragraph(sub_para, doc_processor)
 
             return paragraph
 
@@ -128,20 +134,77 @@ class PDFProcessor:
             logger.error(f"Table translation failed: {e}")
             return table
 
-    def _split_into_lines(self, text: str, paragraph) -> List:
-        """Adapt your existing line splitting logic"""
-        # Implement based on your original PDFTranslator._split_words()
-        pass
+    @staticmethod
+    def is_tag(word: str) -> bool:
+        return re.fullmatch(r'</?\w+>', word.strip()) is not None
 
-    def _build_docx(self, elements, filename):
+    def _split_into_lines(self, para_text, paragraph, document_processor):
+        """Splits text into lines using accurate point/inch measurements"""
+        font_size = paragraph.get_font_size()
+
+        # 1. Get font metrics in points
+        font_size_pt = font_size * self.lang_config.get_font_size_multiplier()
+
+        font = ImageFont.truetype(self.lang_config.get_target_font_path(), size=font_size_pt)
+
+        # 2. Calculate max width IN POINTS (1 inch = 72 points)
+        max_width_pt = Utils.USABLE_PAGE_WIDTH * 72
+
+        # 3. Language-aware splitting
+        return self._split_words(para_text, font, max_width_pt, paragraph, document_processor)
+
+    def _split_words(self ,text, font, max_width_pt, paragraph, document_processor):
+        """Splits space-separated languages using accurate width measurements."""
+        words = text.split()
+        lines = []
+        current_line = []
+        current_width = 0
+
+        space_width = font.getlength(" ")
+        tab_width = 4 * space_width
+
+        para_indent = (
+            tab_width if int(paragraph.get_para_bbox().x0) == document_processor.get_paragraph_start()
+            else 0
+        )
+
+        applied_indent = False
+
+        for i, word in enumerate(words):
+            if self.is_tag(word):
+                current_line.append(word)
+                continue
+
+            word_width = font.getlength(word)
+
+            projected_width = current_width + space_width + word_width
+
+            if not applied_indent:
+                projected_width = word_width + para_indent
+                applied_indent = True
+
+            if projected_width > max_width_pt:
+                lines.append(" ".join(current_line))
+                current_line = [word]
+                current_width = word_width
+            else:
+                current_line.append(word)
+                current_width = projected_width
+
+        if current_line:
+            lines.append(" ".join(current_line))
+
+        return lines
+
+    def _build_docx(self, elements, filename, doc_processor):
         """Generate translated DOCX"""
         doc = Document()
-        builder = DocumentBuilder(doc, self.lang_config)
-
+        builder = DocumentBuilder(document=doc, language_config=self.lang_config, document_processor=doc_processor)
+        pages = doc_processor.get_pages()
         try:
             for element in elements:
                 if element.type == "paragraph":
-                    builder.add_paragraph(element)
+                    builder.add_paragraph(element, pages)
                 elif element.type == "table":
                     builder.add_table(element)
 

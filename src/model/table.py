@@ -19,7 +19,7 @@ class Table(Element):
     content_table: bool = field(default_factory=bool)
 
     def __post_init__(self):
-        self.element_type = Utils.TYPE_TABLE
+        self.type = Utils.TYPE_TABLE
 
     def set_title(self, title):
         self.title = title

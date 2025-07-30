@@ -25,7 +25,7 @@ class Paragraph(Element):
     volume: str = field(default_factory=str)
 
     def __post_init__(self):
-        self.element_type = Utils.TYPE_PARAGRAPH
+        self.type = Utils.TYPE_PARAGRAPH
 
     def set_lines(self, lines):
         self.lines = lines

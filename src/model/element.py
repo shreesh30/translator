@@ -8,11 +8,11 @@ class Element:
     # bbox: fitz.Rect = field(default_factory=fitz.Rect)  # bounding box of the element
     # start: float = field(default_factory=float)         # optional: start position (y)
     # end: float = field(default_factory=float)           # optional: end position (y)
-    element_type: Optional[str] = None                  # e.g., "paragraph", "table", etc.
+    type: Optional[str] = None                  # e.g., "paragraph", "table", etc.
     font_size: float = field(default_factory=float)
 
-    def get_element_type(self):
-        return self.element_type
+    def get_type(self):
+        return self.type
 
     def get_page_number(self):
         return self.page_number
