@@ -1,84 +1,69 @@
 import logging
 import os
+from concurrent.futures.process import ProcessPoolExecutor
 
 from src.model.language_config import LanguageConfig
+from src.service.gpu_worker import GPUWorker
+from src.service.pdf_processor import PDFProcessor
 from src.service.pdf_translator import PDFTranslator
-from multiprocessing import Process, Lock
+from multiprocessing import Process, Lock, Queue
+from typing import List
 import multiprocessing as mp
 
-# def setup_console_logging():
-#     """Configure logging to print only to console."""
-#     logging.basicConfig(
-#         level=logging.INFO,  # Set default level (INFO or DEBUG)
-#         format='%(name)s - %(levelname)s - %(message)s',
-#     )
 
 def setup_console_logging(log_file_path='logs/output.log'):
-    """Configure logging to print to console and save to a file."""
-    # Ensure the log directory exists
     os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
-
-    # Clear existing handlers if re-running the setup
-    for handler in logging.root.handlers[:]:
-        logging.root.removeHandler(handler)
-
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.StreamHandler(),  # Console output
-            logging.FileHandler(log_file_path)  # File output
+            logging.StreamHandler(),
+            logging.FileHandler(log_file_path)
         ]
     )
 
-def translate_for_language(lang_config: LanguageConfig, input_path: str, output_path: str, gpu_lock: Lock):
-    setup_console_logging()
-    try:
-        logging.info(f"Starting translation for: {lang_config.get_target_language()}")
-        translator = PDFTranslator(lang_config, quantization="8-bit")
-        # Inject the shared lock into the class (if needed)
-        PDFTranslator.GPU_LOCK = gpu_lock
-        translator.process_pdf(input_folder_path=input_path, output_folder_path=output_path)
-        logging.info(f"Completed translation for: {lang_config.get_target_language()}")
-    except Exception as e:
-        logging.error(f"Failed translation for {lang_config.get_target_language()}: {e}")
 
-def run_parallel_translation(lang_configs, input_path: str, output_path: str):
-    gpu_lock = Lock()  # Shared GPU lock
-    processes = []
+def run_pipeline(lang_configs: List[LanguageConfig], input_path: str, output_path: str):
+    """Main pipeline with optimized GPU-CPU parallelization"""
+    # Communication queues
+    gpu_task_queue = Queue(maxsize=100)
+    gpu_result_queue = Queue()
 
-    for config in lang_configs:
-        process = Process(
-            target=translate_for_language,
-            args=(config, input_path, output_path, gpu_lock),
-            name=f"Translator-{config.get_target_language()}"
-        )
-        processes.append(process)
-        process.start()
+    # Start GPU Worker (Singleton)
+    gpu_worker = GPUWorker(
+        model_name="ai4bharat/indictrans2-en-indic-1B",
+        task_queue=gpu_task_queue,
+        result_queue=gpu_result_queue,
+        quantization="8-bit"
+    )
+    gpu_worker.start()
 
-    for p in processes:
-        p.join()
+    # Process PDFs in parallel (1 process per language)
+    with ProcessPoolExecutor(max_workers=len(lang_configs)) as executor:
+        futures = []
+        for config in lang_configs:
+            processor = PDFProcessor(
+                lang_config=config,
+                gpu_task_queue=gpu_task_queue,
+                gpu_result_queue=gpu_result_queue,
+                input_path=input_path,
+                output_path=output_path
+            )
+            futures.append(executor.submit(processor.run))
+
+        # Wait for completion
+        for future in futures:
+            future.result()
+
+    # Cleanup
+    gpu_worker.stop()
 
 
 if __name__ == "__main__":
     setup_console_logging()
-    # input_pdf_path = "resource/input/cad_21-07-1947.pdf.DEBATE27-4-12-1-2.pdf"  # Replace with your file
-    # input_pdf_path = "resource/input/cad_21-07-1947.pdf.DEBATE27-4-12-1-3.pdf"  # Replace with your file
-    # input_pdf_path = "resource/input/cad_21-07-1947.pdf.DEBATE27-4-12.pdf"               # Replace with your file
-    # input_pdf_path = "resource/input/cad_09-12-1946_pages_16_to_23.pdf"               # Replace with your file
-    # input_pdf_path = "resource/input/original-doc-16-17.pdf"               # Replace with your file
-    # input_pdf_path = "resource/input/table-1.pdf"               # Replace with your file
     input_pdf_path = "resource/input/pdf"               # Replace with your file
-    # input_pdf_path = "resource/input/table-2-page.pdf"               # Replace with your file
-    # input_pdf_path = "resource/input/cad_04-11-1948.pdf.DEBATE 48.pdf"               # Replace with your file
-    # input_pdf_path = "resource/input/preface-og.pdf"               # Replace with your file
-    # input_pdf_path = "resource/input/original-doc.pdf"               # Replace with your file
-    # input_pdf_path = "resource/input/original-doc-4.pdf"               # Replace with your file
-    # input_pdf_path = "resource/input/cad_09-12-1946_pages_16_to_23-1.pdf"               # Replace with your file
+    # input_pdf_path = "resource/tmp"               # Replace with your file
     output_pdf_path = "resource/output"  # Output filename
-
-    input_file = "src/IndicTrans/train_data/multi_lang_tagged_train.tsv"
-    output_file = "src/IndicTrans/train_data/multi_lang_tagged_train_translated.tsv"
 
     language_configs = [
         # LanguageConfig(target_language="Odia", target_language_key="ory_Orya",
@@ -149,4 +134,4 @@ if __name__ == "__main__":
     #     pdf_translator = PDFTranslator(lang_config)
     #     pdf_translator.process_pdf(input_folder_path=input_pdf_path, output_folder_path='resource/output')
     mp.set_start_method("spawn", force=True)
-    run_parallel_translation(language_configs, input_pdf_path, output_pdf_path)
+    run_pipeline(language_configs, input_pdf_path, output_pdf_path)
