@@ -107,7 +107,7 @@ class GPUWorker(Process):
             # Preprocessing
             processed = self.processor.preprocess_batch(
                 [task['text']],
-                src_lang='en_Latn',
+                src_lang='eng_Latn',
                 tgt_lang=task['lang']
             )[0]
 
