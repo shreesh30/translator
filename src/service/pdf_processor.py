@@ -1,6 +1,6 @@
 import logging
 import os
-from asyncio import as_completed
+from concurrent.futures import as_completed
 from concurrent.futures.thread import ThreadPoolExecutor
 
 from IndicTransToolkit.processor import IndicProcessor
