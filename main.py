@@ -60,14 +60,26 @@ def run_pipeline(lang_configs: List[LanguageConfig], input_path: str, output_pat
 def run_gpu_worker(task_queue, result_queue):
     """Dedicated GPU process"""
     import logging
-    os.makedirs("logs", exist_ok=True)
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        filename="logs/output.log",
-        filemode="a",  # Append mode
-    )
+
+    log_dir = "logs"
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = os.path.join(log_dir, "gpu_worker.log")
+
+    logger = logging.getLogger("gpu_worker")
+    logger.setLevel(logging.INFO)
+
+    # Clear old handlers if any
+    if logger.hasHandlers():
+        logger.handlers.clear()
+
+    fh = logging.FileHandler(log_file, mode="a")
+    fh.setLevel(logging.INFO)
+
+    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+    fh.setFormatter(formatter)
+
+    logger.addHandler(fh)
 
     logger = logging.getLogger(__name__)
     logger.info("GPU worker started")

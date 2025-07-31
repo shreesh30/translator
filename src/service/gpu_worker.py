@@ -22,7 +22,7 @@ from src.model.task_result import TaskResult
 from src.service.document_processor import DocumentProcessor
 from src.utils.utils import Utils
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("gpu_worker")
 
 
 class GPUWorker(Process):
