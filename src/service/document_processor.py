@@ -439,7 +439,7 @@ class DocumentProcessor:
         all_x_1 = [b["bbox"][2] for b in blocks]
         min_x, max_x = min(all_x_0), max(all_x_1)
 
-        logger.info(f"min_x: {min_x}, max_x: {max_x}")
+        logger.debug(f"min_x: {min_x}, max_x: {max_x}")
 
         for block in blocks:
             for line in block.get("lines", []):
@@ -531,7 +531,7 @@ class DocumentProcessor:
             self.extract_pages()
 
             for page in self.pages:
-                logger.info(
+                logger.debug(
                     f"Page {page.get_page_number()} Dimensions:\n"
                     f"Min X: {page.get_min_x()}\n"
                     f"Max X: {page.get_max_x()}\n"
@@ -539,7 +539,7 @@ class DocumentProcessor:
                     f"Max Y: {page.get_max_y()}"
                 )
                 page.process_page()
-                logger.info(f'Page: {page}')
+                logger.debug(f'Page: {page}')
 
             self.elements = [element for page in self.pages for element in page.get_elements()]
 

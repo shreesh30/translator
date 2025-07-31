@@ -227,11 +227,11 @@ class GPUWorker(Process):
 
         try:
             processed = self.processor.preprocess_batch([text], src_lang=src_lang, tgt_lang=tgt_lang)
-            logger.debug(f"Preprocessed: {processed}")
+            logger.info(f"Preprocessed: {processed}")
 
             inputs = self.tokenizer(processed, truncation=True, padding=True, return_tensors="pt").to("cuda")
 
-            logger.debug(f"Tokenized Inputs: {inputs}")
+            logger.info(f"Tokenized Inputs: {inputs}")
             with torch.no_grad():
                 output = self.model.generate(
                         **inputs,
@@ -247,7 +247,7 @@ class GPUWorker(Process):
                         use_cache = False
                     )
 
-                logger.debug(f"Generated Token IDs: {output}")
+                logger.info(f"Generated Token IDs: {output}")
 
             decoded = self.tokenizer.batch_decode(
                     output.detach().cpu().tolist(),
@@ -255,11 +255,11 @@ class GPUWorker(Process):
                     clean_up_tokenization_spaces=False
                 )
 
-            logger.debug(f"Decoded Test: {decoded}")
+            logger.info(f"Decoded Test: {decoded}")
 
             final = self.processor.postprocess_batch(decoded, lang=tgt_lang)
-            logger.debug(f"Post processed Translations: {final}")
-            logger.debug(f"Translated: {final[0]}")
+            logger.info(f"Post processed Translations: {final}")
+            logger.info(f"Translated: {final[0]}")
 
             # Apply replacements
             for old, new in Utils.TAGS.items():

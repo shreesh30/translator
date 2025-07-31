@@ -447,7 +447,7 @@ class Page:
     def merge_lines(self, lines, line_spacing):
 
         # line_spacing = self.avg_line_spacing(lines)
-        logger.info(f'Line Spacing: {line_spacing}')
+        logger.debug(f'Line Spacing: {line_spacing}')
 
         new_lines = []
 
@@ -569,9 +569,9 @@ class Page:
             left_column = sorted(left_column, key=lambda l: l.get_line_bbox().y0)
             right_column = sorted(right_column, key=lambda l: l.get_line_bbox().y0)
 
-            logger.info(f'Center: {center}')
-            logger.info(f'Left Column: {left_column}')
-            logger.info(f'Right Column: {right_column}')
+            logger.debug(f'Center: {center}')
+            logger.debug(f'Left Column: {left_column}')
+            logger.debug(f'Right Column: {right_column}')
 
             table = self.process_contents_table(center, left_column, right_column)
             self.add_element(table)

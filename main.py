@@ -60,6 +60,19 @@ def run_pipeline(lang_configs: List[LanguageConfig], input_path: str, output_pat
 
 def run_gpu_worker(task_queue, result_queue):
     """Dedicated GPU process"""
+    import logging
+
+    # Set up logging in the subprocess
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        filename="output.log",  # same file as main process
+        filemode="a",  # append mode to avoid overwriting
+    )
+
+    logger = logging.getLogger(__name__)
+    logger.info("GPU worker started")
+
     worker = GPUWorker(
         model_name="ai4bharat/indictrans2-en-indic-1B",
         input_queue=task_queue,
