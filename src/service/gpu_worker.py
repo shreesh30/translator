@@ -329,7 +329,10 @@ class GPUWorker(Process):
             task: Task = self.input_queue.get()
             logger.info(f'Input Task: {task}')
 
-            elements, language_configs, filename, document_processor = task
+            language_configs = task.language_configs
+            elements = task.elements
+            filename = task.filename
+            document_processor = task.processor
 
             try:
                 for language_config in language_configs:
