@@ -25,7 +25,7 @@ class Line:
         self.font_size = font_size
 
     def get_text(self):
-        return self. text
+        return self.text
 
     def get_line_bbox(self):
         return self.line_bbox

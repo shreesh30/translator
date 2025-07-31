@@ -14,9 +14,8 @@ from src.model.table import Table
 logger = logging.getLogger(__name__)
 
 class DocumentProcessor:
-    def __init__(self, input_folder_path, language_config):
+    def __init__(self, input_folder_path):
         self.input_folder_path = input_folder_path
-        self.language_config = language_config
         self.pages = None
         self.paragraphs = None
         self.tables = None
@@ -117,20 +116,6 @@ class DocumentProcessor:
 
         para_start = counter.most_common(1)[0][0]
         return para_start
-
-    # def get_paragraph_start(self):
-    #     if not self.paragraphs:
-    #         return 0  # Or some appropriate default value
-    #
-    #     para_start_values = [para.get_start() for para in self.paragraphs]
-    #
-    #     counter = Counter(para_start_values)
-    #
-    #     if not counter:
-    #         return 0  # Again, default fallback
-    #
-    #     para_start = counter.most_common(1)[0][0]
-    #     return para_start
 
     def get_avg_font_size(self):
         font_size = 0
@@ -384,7 +369,7 @@ class DocumentProcessor:
 
     def _process_page(self, page):
         page_num = page.number
-        pg = Page(number=page_num, target_language=self.language_config.get_target_language())
+        pg = Page(number=page_num)
 
         if self.has_center_vertical_line(page) and self.is_table_of_content(page):
             self._process_contents_table(pg, page)

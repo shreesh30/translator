@@ -30,7 +30,7 @@ class Page:
     max_y:float = field(default_factory=float)
     content_width:float = field(default_factory=float)
     content_height:float = field(default_factory=float)
-    target_language: str = field(default_factory=str, repr=False)
+    # target_language: str = field(default_factory=str, repr=False)
     extracted_page_number: str = field(default_factory=str)
     line_spacing: int = field(default_factory=int)
     is_content_table: bool = field(default_factory=bool)
@@ -286,8 +286,8 @@ class Page:
             line_text = line.get_text()
 
             if self.has_non_english_prefix(line_text):
-                pattern = r'(?i)\benglish(?=\s+translation\s+of)'
-                line_text = re.sub(pattern, self.target_language, line_text)
+                # pattern = r'(?i)\benglish(?=\s+translation\s+of)'
+                # line_text = re.sub(pattern, self.target_language, line_text)
 
                 footer = Footer()
                 footer.set_text(line_text)

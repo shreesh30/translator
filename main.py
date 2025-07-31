@@ -11,6 +11,8 @@ from multiprocessing import Process, Lock, Queue,set_start_method
 from typing import List
 import multiprocessing as mp
 
+from src.service.result_handler import ResultHandler
+
 
 def setup_console_logging(log_file_path='logs/output.log'):
     os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
@@ -24,12 +26,11 @@ def setup_console_logging(log_file_path='logs/output.log'):
     )
 
 def run_pipeline(lang_configs: List[LanguageConfig], input_path: str, output_path: str):
-    """Optimal parallel processing with 1 GPU worker + multi-threaded CPU workers"""
-    # 1. Create communication queues in main process
+    # Create queues
     gpu_task_queue = Queue(maxsize=100)
     gpu_result_queue = Queue()
 
-    # 2. Start single GPU worker process
+    # Start GPU worker process
     gpu_worker = Process(
         target=run_gpu_worker,
         args=(gpu_task_queue, gpu_result_queue),
@@ -37,50 +38,50 @@ def run_pipeline(lang_configs: List[LanguageConfig], input_path: str, output_pat
     )
     gpu_worker.start()
 
-    try:
-        # 3. Process languages in parallel threads (not processes)
-        with ThreadPoolExecutor(max_workers=len(lang_configs)) as executor:
-            futures = []
-            for config in lang_configs:
-                futures.append(executor.submit(
-                    process_language,
-                    config,
-                    input_path,
-                    output_path,
-                    gpu_task_queue,
-                    gpu_result_queue
-                ))
+    # Start result handler thread
+    result_handler = ResultHandler(
+        output_queue=gpu_result_queue,
+        output_path=output_path,
+    )
+    result_handler.start()
 
-            for future in futures:
-                future.result()  # Wait for completion
+    try:
+        # Start single PDF processor to enqueue tasks
+        processor = PDFProcessor(
+            lang_configs=lang_configs,
+            gpu_task_queue=gpu_task_queue,
+            input_path=input_path
+        )
+        processor.process_all_pdfs()
+
     finally:
         gpu_worker.terminate()
+        result_handler.stop()
 
 def run_gpu_worker(task_queue, result_queue):
     """Dedicated GPU process"""
     worker = GPUWorker(
         model_name="ai4bharat/indictrans2-en-indic-1B",
-        task_queue=task_queue,
-        result_queue=result_queue,
+        input_queue=task_queue,
+        output_queue=result_queue,
         quantization="8-bit"
     )
     worker.run()
-
-def process_language(config, input_path, output_path, task_queue, result_queue):
-    """Thread-safe language processor"""
-    processor = PDFProcessor(
-        lang_config=config,
-        gpu_task_queue=task_queue,
-        gpu_result_queue=result_queue,
-        input_path=input_path,
-        output_path=output_path
-    )
-    processor.run()
-
+#
+# def process_language(config, input_path, output_path, task_queue, result_queue):
+#     """Thread-safe language processor"""
+#     processor = PDFProcessor(
+#         lang_config=config,
+#         gpu_task_queue=task_queue,
+#         gpu_result_queue=result_queue,
+#         input_path=input_path,
+#         output_path=output_path
+#     )
+#     processor.run()
 
 if __name__ == "__main__":
     set_start_method('spawn', force=True)  # Critical for CUDA compatibility
-    
+
     setup_console_logging()
     input_pdf_path = "resource/input/pdf"               # Replace with your file
     # input_pdf_path = "resource/tmp"               # Replace with your file
