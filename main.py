@@ -21,7 +21,7 @@ def setup_console_logging(log_file_path='logs/output.log'):
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
             logging.StreamHandler(),
-            logging.FileHandler(log_file_path, mode='w')  # <-- Overwrite on each main run
+            logging.FileHandler(log_file_path, mode='w')  # Overwrite on each main run
         ]
     )
 
@@ -60,10 +60,11 @@ def run_pipeline(lang_configs: List[LanguageConfig], input_path: str, output_pat
 def run_gpu_worker(task_queue, result_queue):
     """Dedicated GPU process"""
     import logging
+    os.makedirs("logs", exist_ok=True)
 
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(message)s",
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         filename="logs/output.log",
         filemode="a",  # Append mode
     )
