@@ -21,7 +21,7 @@ def setup_console_logging(log_file_path='logs/output.log'):
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
             logging.StreamHandler(),
-            logging.FileHandler(log_file_path)
+            logging.FileHandler(log_file_path, mode='w')  # <-- Overwrite on each main run
         ]
     )
 
@@ -62,24 +62,25 @@ def run_gpu_worker(task_queue, result_queue):
     """Dedicated GPU process"""
     import logging
 
-    # Set up logging in the subprocess
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(levelname)s - %(message)s",
-        filename="output.log",  # same file as main process
-        filemode="a",  # append mode to avoid overwriting
+        filename="logs/output.log",
+        filemode="a",  # Append mode
     )
 
     logger = logging.getLogger(__name__)
     logger.info("GPU worker started")
-
-    worker = GPUWorker(
-        model_name="ai4bharat/indictrans2-en-indic-1B",
-        input_queue=task_queue,
-        output_queue=result_queue,
-        quantization="8-bit"
-    )
-    worker.run()
+    try:
+        worker = GPUWorker(
+            model_name="ai4bharat/indictrans2-en-indic-1B",
+            input_queue=task_queue,
+            output_queue=result_queue,
+            quantization="8-bit"
+        )
+        worker.run()
+    except Exception as e:
+        logger.exception(f"GPU Worker crashed: {e}")
 #
 # def process_language(config, input_path, output_path, task_queue, result_queue):
 #     """Thread-safe language processor"""
