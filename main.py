@@ -34,7 +34,6 @@ def run_pipeline(lang_configs: List[LanguageConfig], input_path: str, output_pat
     gpu_worker = Process(
         target=run_gpu_worker,
         args=(gpu_task_queue, gpu_result_queue),
-        daemon=True
     )
     gpu_worker.start()
 
