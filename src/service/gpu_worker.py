@@ -1,16 +1,12 @@
+import logging
 import re
-from threading import Event
+from multiprocessing import Process, Queue
 
 import fitz
 import torch
+from IndicTransToolkit.processor import IndicProcessor
 from PIL import ImageFont
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, BitsAndBytesConfig
-from multiprocessing import Process, Queue
-from IndicTransToolkit.processor import IndicProcessor
-import logging
-import queue
-from typing import List, Dict
-import time
 
 from src.model.footer import Footer
 from src.model.language_config import LanguageConfig
