@@ -27,6 +27,8 @@ class ResultHandler:
             try:
                 result: TaskResult = self.output_queue.get()
 
+                logger.info(f'Task Result: {result}')
+
                 # Handle error case
                 if result.error is not None:
                     logger.error(f"Translation failed for {result.filename}: {result.error}")

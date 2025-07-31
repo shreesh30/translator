@@ -41,6 +41,7 @@ class PDFProcessor:
             elements = processor.get_elements()
 
             task = Task(elements=elements, language_configs=self.lang_configs, filename=filename, processor=processor)
+            logger.info(f'Inserting {task} in Input Queue')
             input_queue.put(task)
 
         except Exception as e:

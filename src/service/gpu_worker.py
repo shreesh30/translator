@@ -322,14 +322,12 @@ class GPUWorker(Process):
         logger.info("Model initialized successfully")
 
     def run(self):
-        print("[GPUWorker] Starting and loading model...")
+        logger.info("[GPUWorker] Starting and loading model...")
         self._init_model()
 
         while True:
             task: Task = self.input_queue.get()
-            if task == "STOP":
-                print("[GPUWorker] Stopping.")
-                break
+            logger.info(f'Input Task: {task}')
 
             elements, language_configs, filename, document_processor = task
 
