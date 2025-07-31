@@ -14,101 +14,79 @@ import multiprocessing as mp
 from src.service.result_handler import ResultHandler
 
 
-def setup_console_logging(log_file_path='logs/output.log'):
-    os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
+def setup_logging(log_file_name: str):
+    """Configure logging to a file for the current process."""
+    os.makedirs("logs", exist_ok=True)
     logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.StreamHandler(),
-            logging.FileHandler(log_file_path, mode='w')  # Overwrite on each main run
-        ]
+        filename=os.path.join("logs", log_file_name),
+        level=logging.DEBUG,
+        format="%(asctime)s [%(levelname)s] %(processName)s - %(message)s",
+        force=True  # override inherited loggers
     )
 
-def run_pipeline(lang_configs: List[LanguageConfig], input_path: str, output_path: str):
+def run_pipeline(lang_configs, input_path, output_path):
+    logger = logging.getLogger("main")
+    logger.info("Initializing queues and starting processes...")
+
     # Create queues
     gpu_task_queue = Queue(maxsize=100)
     gpu_result_queue = Queue()
 
-    # Start GPU worker process
+    # Start GPU Worker process
     gpu_worker = Process(
         target=run_gpu_worker,
-        args=(gpu_task_queue, gpu_result_queue),
+        args=(gpu_task_queue, gpu_result_queue)
     )
     gpu_worker.start()
 
-    # Start result handler thread
-    result_handler = ResultHandler(
-        output_queue=gpu_result_queue,
-        output_path=output_path,
+    # Start Result Handler process
+    result_handler = Process(
+        target=run_result_handler,
+        args=(gpu_result_queue, output_path)
     )
     result_handler.start()
 
-    try:
-        # Start single PDF processor to enqueue tasks
-        processor = PDFProcessor(
-            lang_configs=lang_configs,
-            gpu_task_queue=gpu_task_queue,
-            input_path=input_path
-        )
-        processor.process_all_pdfs()
+    # Start processing PDFs
+    logger.info("Starting PDF processing with input path: %s", input_path)
+    processor = PDFProcessor(
+        lang_configs=lang_configs,
+        input_path=input_path,
+        gpu_task_queue=gpu_task_queue
+    )
+    processor.process_all_pdfs()
 
-    finally:
-        gpu_worker.terminate()
-        result_handler.stop()
+    # Wait for child processes (optional, or use daemon=True for fire-and-forget)
+    gpu_worker.join()
+    result_handler.join()
 
-def run_gpu_worker(task_queue, result_queue):
-    """Dedicated GPU process"""
-    import logging
-
-
-    log_dir = "logs"
-    os.makedirs(log_dir, exist_ok=True)
-    log_file = os.path.join(log_dir, "gpu_worker.log")
-
+def run_gpu_worker(task_queue: Queue, result_queue: Queue):
+    setup_logging("gpu_worker.log")
     logger = logging.getLogger("gpu_worker")
-    logger.setLevel(logging.INFO)
+    logger.info("GPU Worker process started.")
 
-    # Clear old handlers if any
-    if logger.hasHandlers():
-        logger.handlers.clear()
+    worker = GPUWorker(
+        model_name="ai4bharat/indictrans2-en-indic-1B",
+        input_queue=task_queue,
+        output_queue=result_queue,
+        quantization="8-bit"
+    )
+    worker.run()
 
-    fh = logging.FileHandler(log_file, mode="a")
-    fh.setLevel(logging.INFO)
+def run_result_handler(result_queue: Queue, output_path):
+    setup_logging("result_handler.log")
+    logger = logging.getLogger("result_handler")
+    logger.info("Result Handler process started.")
 
-    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-    fh.setFormatter(formatter)
-
-    logger.addHandler(fh)
-
-    logger = logging.getLogger(__name__)
-    logger.info("GPU worker started")
-    try:
-        worker = GPUWorker(
-            model_name="ai4bharat/indictrans2-en-indic-1B",
-            input_queue=task_queue,
-            output_queue=result_queue,
-            quantization="8-bit"
-        )
-        worker.run()
-    except Exception as e:
-        logger.exception(f"GPU Worker crashed: {e}")
-#
-# def process_language(config, input_path, output_path, task_queue, result_queue):
-#     """Thread-safe language processor"""
-#     processor = PDFProcessor(
-#         lang_config=config,
-#         gpu_task_queue=task_queue,
-#         gpu_result_queue=result_queue,
-#         input_path=input_path,
-#         output_path=output_path
-#     )
-#     processor.run()
+    handler = ResultHandler(result_queue, output_path)
+    handler.run()
 
 if __name__ == "__main__":
-    set_start_method('spawn', force=True)  # Critical for CUDA compatibility
+    try:
+        set_start_method("spawn", force=True)
+    except RuntimeError:
+        pass
 
-    setup_console_logging()
+    setup_logging("output.log")
     input_pdf_path = "resource/input/pdf"               # Replace with your file
     # input_pdf_path = "resource/tmp"               # Replace with your file
     output_pdf_path = "resource/output"  # Output filename
