@@ -104,9 +104,9 @@ if __name__ == "__main__":
         # LanguageConfig(target_language="Dogri", target_language_key="doi_Deva",
         #                target_font_path="resource/fonts/SakalBharati_N_Ship.ttf", font_size_multiplier=1.1,
         #                line_spacing_multiplier=1.25),
-        # LanguageConfig(target_language="Gujarati", target_language_key="guj_Gujr",
-        #                target_font_path="resource/fonts/GJOTAvantika_N_Ship.ttf", font_size_multiplier=1.1,
-        #                line_spacing_multiplier=1.25),
+        LanguageConfig(target_language="Gujarati", target_language_key="guj_Gujr",
+                       target_font_path="resource/fonts/GJOTAvantika_N_Ship.ttf", font_size_multiplier=1.1,
+                       line_spacing_multiplier=1.25),
         # LanguageConfig(target_language="Malayalam", target_language_key="mal_Mlym",
         #                target_font_path="resource/fonts/MLOT-Karthika_N_Ship.ttf", font_size_multiplier=1.1,
         #                line_spacing_multiplier=1.25),
@@ -154,9 +154,4 @@ if __name__ == "__main__":
         #                line_spacing_multiplier=1.25, right_to_left=True)
 
     ]
-
-    # pdf_translator = None
-    # for lang_config in language_configs:
-    #     pdf_translator = PDFTranslator(lang_config)
-    #     pdf_translator.process_pdf(input_folder_path=input_pdf_path, output_folder_path='resource/output')
     run_pipeline(language_configs, input_pdf_path, output_pdf_path)
