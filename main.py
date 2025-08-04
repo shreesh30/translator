@@ -87,7 +87,7 @@ if __name__ == "__main__":
         pass
 
     setup_logging("output.log")
-    input_pdf_path = "resource/input/pdf"               # Replace with your file
+    input_pdf_path = "resource/input/pdf-complete"               # Replace with your file
     # input_pdf_path = "resource/tmp"               # Replace with your file
     output_pdf_path = "resource/output"  # Output filename
 
@@ -95,24 +95,24 @@ if __name__ == "__main__":
         # LanguageConfig(target_language="Odia", target_language_key="ory_Orya",
         #                target_font_path="resource/fonts/SakalBharati_N_Ship.ttf", font_size_multiplier=1.1,
         #                line_spacing_multiplier=1.25),
-        LanguageConfig(target_language="Bengali", target_language_key="ben_Beng",
-                       target_font_path="resource/fonts/bnotdurga_n_ship.ttf", font_size_multiplier=1.1,
-                       line_spacing_multiplier=1.25),
+        # LanguageConfig(target_language="Bengali", target_language_key="ben_Beng",
+        #                target_font_path="resource/fonts/bnotdurga_n_ship.ttf", font_size_multiplier=1.1,
+        #                line_spacing_multiplier=1.25),
         # LanguageConfig(target_language="Hindi", target_language_key="hin_Deva",
         #                target_font_path="resource/fonts/DVOTSurekh_N_Ship.ttf", font_size_multiplier=1.1,
         #                line_spacing_multiplier=1.25),
         # LanguageConfig(target_language="Dogri", target_language_key="doi_Deva",
         #                target_font_path="resource/fonts/SakalBharati_N_Ship.ttf", font_size_multiplier=1.1,
         #                line_spacing_multiplier=1.25),
-        LanguageConfig(target_language="Gujarati", target_language_key="guj_Gujr",
-                       target_font_path="resource/fonts/GJOTAvantika_N_Ship.ttf", font_size_multiplier=1.1,
-                       line_spacing_multiplier=1.25),
+        # LanguageConfig(target_language="Gujarati", target_language_key="guj_Gujr",
+        #                target_font_path="resource/fonts/GJOTAvantika_N_Ship.ttf", font_size_multiplier=1.1,
+        #                line_spacing_multiplier=1.25),
         # LanguageConfig(target_language="Malayalam", target_language_key="mal_Mlym",
         #                target_font_path="resource/fonts/MLOT-Karthika_N_Ship.ttf", font_size_multiplier=1.1,
         #                line_spacing_multiplier=1.25),
-        # LanguageConfig(target_language="Marathi", target_language_key="mar_Deva",
-        #                target_font_path="resource/fonts/Sakal Marathi Normal_Ship.ttf", font_size_multiplier=1.1,
-        #                line_spacing_multiplier=1.25),
+        LanguageConfig(target_language="Marathi", target_language_key="mar_Deva",
+                       target_font_path="resource/fonts/Sakal Marathi Normal_Ship.ttf", font_size_multiplier=1.1,
+                       line_spacing_multiplier=1.25),
         # LanguageConfig(target_language="Punjabi", target_language_key="pan_Guru",
         #                target_font_path="resource/fonts/PNOTAmar_N_Ship.ttf", font_size_multiplier=1.1,
         #                line_spacing_multiplier=1.25),
