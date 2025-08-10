@@ -9,6 +9,7 @@ from dataclasses import asdict
 from src.model.task import Task
 from src.service.document_processor import DocumentProcessor
 from src.service.rabbitmq_producer import RabbitMQProducer
+from src.utils.utils import Utils
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,7 @@ class PDFProcessor:
             processor.process_document()
             elements = processor.get_elements()
             total_chunks = len(elements)
-            producer = RabbitMQProducer(host='localhost', queue='tasks')
+            producer = RabbitMQProducer(host=Utils.KEY_LOCALHOST, queue= Utils.QUEUE_TASKS)
 
             for language_config in self.lang_configs:
                 task_id = uuid.uuid4().hex

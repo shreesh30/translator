@@ -3,17 +3,8 @@ import os
 
 from src.model.language_config import LanguageConfig
 from src.service.pdf_processor import PDFProcessor
+from src.utils.utils import Utils
 
-
-def setup_logging(log_file_name: str):
-    """Configure logging to a file for the current process."""
-    os.makedirs("logs", exist_ok=True)
-    logging.basicConfig(
-        filename=os.path.join("logs", log_file_name),
-        level=logging.DEBUG,
-        format="%(asctime)s [%(levelname)s] %(processName)s - %(message)s",
-        force=True  # override inherited loggers
-    )
 
 def run_pdf_processor(lang_configs, input_path):
     logger = logging.getLogger("ingestion_service")
@@ -27,7 +18,7 @@ def run_pdf_processor(lang_configs, input_path):
     processor.process_all_pdfs()
 
 if __name__ == "__main__":
-    # setup_logging("output.log")
+    Utils.setup_logging("ingestion_service.log")
     input_pdf_path = "resource/input/pdf-complete"  # Replace with your file
     # input_pdf_path = "resource/tmp"               # Replace with your file
     output_pdf_path = "resource/output"  # Output filename

@@ -1,3 +1,7 @@
+import logging
+import os
+
+
 class Utils:
     TAGS = {'[123]': '<b>', '[456]': '</b>'}
     STANDARDIZED_PAGE_HEIGHT = 11.69
@@ -11,3 +15,19 @@ class Utils:
     USABLE_PAGE_WIDTH = (STANDARDIZED_PAGE_WIDTH - STANDARDIZED_LEFT_MARGIN - STANDARDIZED_RIGHT_MARGIN)
     TYPE_PARAGRAPH = "paragraph"
     TYPE_TABLE = "table"
+
+    # RABBITMQ Keys
+    QUEUE_TASKS = 'tasks'
+    QUEUE_RESULTS = 'results'
+    KEY_LOCALHOST = "localhost"
+
+    @staticmethod
+    def setup_logging(log_file_name: str):
+        """Configure logging to a file for the current process."""
+        os.makedirs("logs", exist_ok=True)
+        logging.basicConfig(
+            filename=os.path.join("logs", log_file_name),
+            level=logging.DEBUG,
+            format="%(asctime)s [%(levelname)s] %(processName)s - %(message)s",
+            force=True  # override inherited loggers
+        )
