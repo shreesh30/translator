@@ -8,7 +8,10 @@ from src.service.document_processor import DocumentProcessor
 
 @dataclass
 class Task:
-    elements: List[Element]
+    id: str
+    element: Element
     filename: str
     # processor: DocumentProcessor
     language_config: LanguageConfig
+    chunk_index: int
+    total_chunks: int
