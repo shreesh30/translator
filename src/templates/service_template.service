@@ -1,0 +1,13 @@
+[Unit]
+Description=$description
+After=network.target
+
+[Service]
+Type=simple
+User=$user
+WorkingDirectory=$working_directory
+ExecStart=$exec_start
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

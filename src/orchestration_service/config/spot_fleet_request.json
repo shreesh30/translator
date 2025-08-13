@@ -1,0 +1,17 @@
+{
+  "IamFleetRole": "arn:aws:iam::604876225477:user/translator-admin",
+  "AllocationStrategy": "capacity-optimized",
+  "TargetCapacity": 1,
+  "OnDemandTargetCapacity": 0,
+  "SpotPrice": "1",
+  "TerminateInstancesWithExpiration": true,
+  "Type": "maintain",
+  "LaunchTemplateConfigs": [
+      {
+        "LaunchTemplateSpecification": {
+          "LaunchTemplateId": "lt-0284e5f196016fce5",
+          "Version": "$Latest"
+        }
+      }
+    ]
+}

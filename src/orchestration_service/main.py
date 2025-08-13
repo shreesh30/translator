@@ -2,7 +2,7 @@ from src.orchestration_service.orchestration_manager import OrchestrationManager
 from src.utils.utils import Utils
 
 def run_orchestration_manager():
-    orchestration_manager = OrchestrationManager(spot_fleet_config_path="/path/to/spot_fleet_request.json")
+    orchestration_manager = OrchestrationManager(spot_fleet_config_path="config/spot_fleet_request.json")
     orchestration_manager.run()
 
 

@@ -1,7 +1,10 @@
 import logging
 import os
+import platform
+import subprocess
 from concurrent.futures.process import ProcessPoolExecutor
 from concurrent.futures.thread import ThreadPoolExecutor
+from string import Template
 
 from src.model.language_config import LanguageConfig
 from src.service.gpu_worker import GPUWorker
@@ -14,7 +17,7 @@ import multiprocessing as mp
 from src.service.result_handler import ResultHandler
 
 
-def setup_logging(log_file_name: str):
+'''def setup_logging(log_file_name: str):
     """Configure logging to a file for the current process."""
     os.makedirs("logs", exist_ok=True)
     logging.basicConfig(
@@ -78,20 +81,61 @@ def run_result_handler(result_queue: Queue, output_path):
     logger.info("Result Handler process started.")
 
     handler = ResultHandler(result_queue, output_path)
-    handler.run()
+    handler.run()'''
+
+# Path to the service template
+TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "templates", "service_template.service")
+GENERATED_DIR = os.path.join(os.path.dirname(__file__), "generated_services")
+
+def generate_service_file(service_name, description, user, working_directory, exec_start):
+    # Load the template file
+    with open(TEMPLATE_PATH, "r") as f:
+        template_content = Template(f.read())
+
+    # Replace placeholders with actual values
+    service_content = template_content.substitute(
+        description=description,
+        user=user,
+        working_directory=working_directory,
+        exec_start=exec_start
+    )
+
+    # Choose where to place the file based on OS
+    if platform.system() == "Linux":
+        output_path = f"/etc/systemd/system/{service_name}.service"
+    else:
+        os.makedirs(GENERATED_DIR, exist_ok=True)
+        output_path = os.path.join(GENERATED_DIR, f"{service_name}.service")
+
+    # Write the final service file
+    with open(output_path, "w") as f:
+        f.write(service_content)
+
+    print(f"Service file generated at: {output_path}")
+    return output_path
+
+def install_service(service_name):
+    if platform.system() == "Linux":
+        subprocess.run(["systemctl", "daemon-reload"], check=True)
+        subprocess.run(["systemctl", "enable", service_name], check=True)
+        subprocess.run(["systemctl", "start", service_name], check=True)
+        print(f"Service '{service_name}' installed and started.")
+    else:
+        print(f"On macOS: Service file saved to generated_services/, not installed.")
+
 
 if __name__ == "__main__":
-    try:
-        set_start_method("spawn", force=True)
-    except RuntimeError:
-        pass
-
-    setup_logging("output.log")
-    input_pdf_path = "resource/input/pdf-complete"               # Replace with your file
-    # input_pdf_path = "resource/tmp"               # Replace with your file
-    output_pdf_path = "resource/output"  # Output filename
-
-    language_configs = [
+    # try:
+    #     set_start_method("spawn", force=True)
+    # except RuntimeError:
+    #     pass
+    #
+    # setup_logging("output.log")
+    # input_pdf_path = "resource/input/pdf-complete"               # Replace with your file
+    # # input_pdf_path = "resource/tmp"               # Replace with your file
+    # output_pdf_path = "resource/output"  # Output filename
+    #
+    # language_configs = [
         # LanguageConfig(target_language="Odia", target_language_key="ory_Orya",
         #                target_font_path="resource/fonts/SakalBharati_N_Ship.ttf", font_size_multiplier=1.1,
         #                line_spacing_multiplier=1.25),
@@ -110,9 +154,9 @@ if __name__ == "__main__":
         # LanguageConfig(target_language="Malayalam", target_language_key="mal_Mlym",
         #                target_font_path="resource/fonts/MLOT-Karthika_N_Ship.ttf", font_size_multiplier=1.1,
         #                line_spacing_multiplier=1.25),
-        LanguageConfig(target_language="Marathi", target_language_key="mar_Deva",
-                       target_font_path="resource/fonts/Sakal Marathi Normal_Ship.ttf", font_size_multiplier=1.1,
-                       line_spacing_multiplier=1.25),
+        # LanguageConfig(target_language="Marathi", target_language_key="mar_Deva",
+        #                target_font_path="resource/fonts/Sakal Marathi Normal_Ship.ttf", font_size_multiplier=1.1,
+        #                line_spacing_multiplier=1.25),
         # LanguageConfig(target_language="Punjabi", target_language_key="pan_Guru",
         #                target_font_path="resource/fonts/PNOTAmar_N_Ship.ttf", font_size_multiplier=1.1,
         #                line_spacing_multiplier=1.25),
@@ -153,5 +197,32 @@ if __name__ == "__main__":
         #                target_font_path="resource/fonts/UROT-Ghalib_N_Ship.ttf", font_size_multiplier=1.1,
         #                line_spacing_multiplier=1.25, right_to_left=True)
 
+    # ]
+    # run_pipeline(language_configs, input_pdf_path, output_pdf_path)
+
+    services_to_create = [
+        {
+            "name": "ingestion_service",
+            "description": "Ingestion Service",
+            "script": "ingestion_service/main.py"
+        },
+        {
+            "name": "orchestration_service",
+            "description": "Orchestration Service",
+            "script": "orchestration_service/main.py"
+        }
     ]
-    run_pipeline(language_configs, input_pdf_path, output_pdf_path)
+
+    for svc in services_to_create:
+        working_dir = os.path.join(os.path.dirname(__file__), "src")
+        exec_command = f"python3 {os.path.join(working_dir, svc['script'])}"
+
+        path = generate_service_file(
+            service_name=svc["name"],
+            description=svc["description"],
+            user=os.getenv("USER"),
+            working_directory=working_dir,
+            exec_start=exec_command
+        )
+
+        install_service(svc["name"])
