@@ -5,7 +5,7 @@ After=network.target
 [Service]
 Type=simple
 User=$user
-WorkingDirectory=$working_directory
+WorkingDirectory=$source_directory
 ExecStart=$exec_start
 Restart=always
 

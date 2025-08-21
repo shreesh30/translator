@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class OrchestrationManager:
     def __init__(self, spot_fleet_config_path):
         self.spot_fleet_config_path = spot_fleet_config_path
-        self.ec2_client = boto3.client("ec2", region_name="ap-south-1")
+        self.ec2_client = boto3.client("ec2", region_name="us-east-1")
 
     @staticmethod
     def get_queue_message_count(queue):
