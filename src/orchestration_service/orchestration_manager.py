@@ -18,7 +18,7 @@ class OrchestrationManager:
     def get_queue_message_count(queue):
         connection = pika.BlockingConnection(pika.ConnectionParameters(host= Utils.KEY_LOCALHOST))
         channel = connection.channel()
-        queue_info = channel.queue_declare(queue=queue, passive=True)
+        queue_info = channel.queue_declare(queue=queue, durable=True)
         message_count = queue_info.method.message_count
         connection.close()
         return message_count
