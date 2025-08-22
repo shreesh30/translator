@@ -19,8 +19,8 @@ def run_pdf_processor(lang_configs, input_path):
 
 if __name__ == "__main__":
     Utils.setup_logging("ingestion_service.log")
-    input_pdf_path = "resource/input/pdf-complete"  # Replace with your file
-    # input_pdf_path = "resource/tmp"               # Replace with your file
+    # input_pdf_path = "resource/input/pdf-complete"  # Replace with your file
+    input_pdf_path = "resource/tmp"               # Replace with your file
     output_pdf_path = "resource/output"  # Output filename
 
     language_configs = [

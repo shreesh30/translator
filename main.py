@@ -2,7 +2,7 @@ import os
 import subprocess
 from string import Template
 
-def generate_service_file(service_name, description, user, source_directory, exec_start):
+def generate_service_file(service_name, description, user, working_directory, exec_start):
     template_path = os.path.join(os.path.dirname(__file__), "src" ,"templates", "service_template.service")
 
     # Load the template file
@@ -13,7 +13,7 @@ def generate_service_file(service_name, description, user, source_directory, exe
     service_content = template_content.substitute(
         description=description,
         user=user,
-        source_directory=source_directory,
+        working_directory=working_directory,
         exec_start=exec_start
     )
 
@@ -50,15 +50,15 @@ if __name__ == "__main__":
 
     for svc in services:
         working_dir = os.path.dirname(__file__)
-        source_dir = os.path.join(os.path.dirname(__file__), "src")
+        source_dir = os.path.join(working_dir, "src")
 
-        exec_command = f"python3 {os.path.join(source_dir, svc['script'])}"
+        exec_command = f"{working_dir}/venv/bin/python3 {os.path.join(source_dir, svc['script'])}"
 
         path = generate_service_file(
             service_name=svc["name"],
             description=svc["description"],
             user=os.getenv("USER"),
-            source_directory=source_dir,
+            working_directory=working_dir,
             exec_start=exec_command
         )
 
