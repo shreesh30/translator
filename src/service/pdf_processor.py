@@ -9,6 +9,7 @@ from dataclasses import asdict
 from src.model.task import Task
 from src.service.document_processor import DocumentProcessor
 from src.service.rabbitmq_producer import RabbitMQProducer
+from src.utils.custom_encoder import CustomJSONEncoder
 from src.utils.utils import Utils
 
 logger = logging.getLogger(__name__)
@@ -52,7 +53,7 @@ class PDFProcessor:
                 task_id = uuid.uuid4().hex
                 for idx, element in enumerate(elements):
                     task = Task(id=task_id, element = element, language_config=language_config, filename=filename, chunk_index=idx, total_chunks=total_chunks)
-                    task_json = json.dumps(asdict(task)) # type: ignore[arg-type]
+                    task_json = json.dumps(asdict(task), cls=CustomJSONEncoder) # type: ignore[arg-type]
                     self.producer.publish(task_json)
                     logger.info(f"Queued chunk {idx+1}/{total_chunks} for {filename} in {language_config['lang_code']} (task_id={task_id})")
 

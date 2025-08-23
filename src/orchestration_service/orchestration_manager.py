@@ -53,6 +53,6 @@ class OrchestrationManager:
             else:
                 logger.info("No tasks in queue. Waiting...")
 
-            time.sleep(10)  # check every 10 seconds
+            time.sleep(30)  # check every 30 seconds
 
 
