@@ -3,8 +3,8 @@ import logging
 import time
 
 import boto3
-import pika
 
+from src.service.rabbitmq_producer import RabbitMQProducer
 from src.utils.utils import Utils
 
 logger = logging.getLogger(__name__)
@@ -15,12 +15,13 @@ class OrchestrationManager:
         self.ec2_client = boto3.client("ec2", region_name="us-east-1")
 
     @staticmethod
-    def get_queue_message_count(queue):
-        connection = pika.BlockingConnection(pika.ConnectionParameters(host= Utils.KEY_LOCALHOST))
-        channel = connection.channel()
-        queue_info = channel.queue_declare(queue=queue, durable=True)
+    def get_task_count():
+        producer = RabbitMQProducer(host=Utils.KEY_LOCALHOST, queue=Utils.QUEUE_TASKS)
+        producer.connect()
+        queue_info = producer.get_queue_info(Utils.QUEUE_TASKS)
         message_count = queue_info.method.message_count
-        connection.close()
+        producer.close()
+
         return message_count
 
     def is_spot_fleet_running(self, fleet_id):
@@ -43,7 +44,7 @@ class OrchestrationManager:
         fleet_id = None
 
         while True:
-            tasks_count = self.get_queue_message_count(Utils.QUEUE_TASKS)
+            tasks_count = self.get_task_count()
             logger.info(f"Total Tasks: {tasks_count}")
 
             if tasks_count > 0:

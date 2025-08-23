@@ -18,6 +18,8 @@ class PDFProcessor:
     def __init__(self, lang_configs, input_path):
         self.lang_configs = lang_configs
         self.input_path = input_path
+        self.producer = RabbitMQProducer(host=Utils.KEY_LOCALHOST, queue= Utils.QUEUE_TASKS)
+        self.producer.connect()
 
     def process_all_pdfs(self):
         pdf_files = [f for f in os.listdir(self.input_path) if f.endswith(".pdf")]
@@ -35,6 +37,8 @@ class PDFProcessor:
                 except Exception as e:
                     logger.error(f"Error processing a file: {e}")
 
+        self.producer.close()
+
     def process_single_pdf(self, filename):
         try:
             file_path = os.path.join(self.input_path, filename)
@@ -42,14 +46,14 @@ class PDFProcessor:
             processor.process_document()
             elements = processor.get_elements()
             total_chunks = len(elements)
-            producer = RabbitMQProducer(host=Utils.KEY_LOCALHOST, queue= Utils.QUEUE_TASKS)
+
 
             for language_config in self.lang_configs:
                 task_id = uuid.uuid4().hex
                 for idx, element in enumerate(elements):
                     task = Task(id=task_id, element = element, language_config=language_config, filename=filename, chunk_index=idx, total_chunks=total_chunks)
                     task_json = json.dumps(asdict(task)) # type: ignore[arg-type]
-                    producer.publish(task_json)
+                    self.producer.publish(task_json)
                     logger.info(f"Queued chunk {idx+1}/{total_chunks} for {filename} in {language_config['lang_code']} (task_id={task_id})")
 
         except Exception as e:

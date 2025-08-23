@@ -32,6 +32,7 @@ class RabbitMQProducer:
             logging.error(f"[Producer] Connection failed: {e}")
             raise
 
+
     def publish(self, message, persistent=True):
         """
         Publishes a message to the queue.
@@ -55,6 +56,13 @@ class RabbitMQProducer:
             properties=properties
         )
         logging.info(f"[Producer] Message published to {self.queue}")
+
+    def get_queue_info(self, queue):
+        if not self.channel:
+            raise RuntimeError("RabbitMQ connection not established. Call connect() first.")
+
+        queue_info= self.channel.queue_declare(queue=queue, passive=True)
+        return queue_info
 
     def close(self):
         """
