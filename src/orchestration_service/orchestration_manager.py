@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import time
 
 import boto3
@@ -8,6 +9,8 @@ from src.service.rabbitmq_producer import RabbitMQProducer
 from src.utils.utils import Utils
 
 logger = logging.getLogger(__name__)
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 class OrchestrationManager:
     def __init__(self, spot_fleet_config_path):
@@ -30,7 +33,9 @@ class OrchestrationManager:
 
     def request_spot_fleet(self):
         logger.info("Requesting spot fleet...")
-        with open(self.spot_fleet_config_path, "r") as f:
+        config_path = os.path.join(BASE_DIR, self.spot_fleet_config_path)
+
+        with open(config_path, "r") as f:
             config = json.load(f)
         response = self.ec2_client.request_spot_fleet(
             SpotFleetRequestConfig=config
