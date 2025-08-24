@@ -55,7 +55,7 @@ class PDFProcessor:
                     task = Task(id=task_id, element = element, language_config=language_config, filename=filename, chunk_index=idx, total_chunks=total_chunks)
                     task_json = json.dumps(asdict(task), cls=CustomJSONEncoder) # type: ignore[arg-type]
                     self.producer.publish(task_json)
-                    logger.info(f"Queued chunk {idx+1}/{total_chunks} for {filename} in {language_config['lang_code']} (task_id={task_id})")
+                    logger.info(f"Queued chunk {idx+1}/{total_chunks} for {filename} in {language_config.get_target_language()} (task_id={task_id})")
 
         except Exception as e:
             logger.error(f"Error processing {filename}: {e}")
