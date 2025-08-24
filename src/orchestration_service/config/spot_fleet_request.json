@@ -1,5 +1,5 @@
 {
-  "IamFleetRole": "arn:aws:iam::604876225477:role/Translator-Role",
+  "IamFleetRole": "arn:aws:iam::604876225477:role/TranslatorSpotFleetRole",
   "AllocationStrategy": "capacity-optimized-prioritized",
   "TargetCapacity": 2,
   "OnDemandTargetCapacity": 0,
