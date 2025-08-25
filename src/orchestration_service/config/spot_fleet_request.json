@@ -1,5 +1,5 @@
 {
-  "IamFleetRole": "arn:aws:iam::604876225477:role/aws-service-role/spotfleet.amazonaws.com/AWSServiceRoleForEC2SpotFleet",
+  "IamFleetRole": "arn:aws:iam::604876225477:role/TranslatorSpotFleetRole",
   "AllocationStrategy": "capacityOptimizedPrioritized",
   "TargetCapacity": 2,
   "OnDemandTargetCapacity": 0,
