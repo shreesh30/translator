@@ -28,7 +28,7 @@ class OrchestrationManager:
         return message_count
 
     def is_spot_fleet_running(self):
-        response = self.ec2_client.describe_spot_fleet_instances()
+        response = self.ec2_client.describe_spot_fleet_requests()
         logger.info(f'Spot Fleet Response: {response}')
         for req in response.get("SpotFleetRequestConfigs", []):
             state = req["SpotFleetRequestState"]
