@@ -27,9 +27,15 @@ class OrchestrationManager:
 
         return message_count
 
-    def is_spot_fleet_running(self, fleet_id):
-        response = self.ec2_client.describe_spot_fleet_instances(SpotFleetRequestId=fleet_id)
-        return len(response.get("ActiveInstances", [])) > 0
+    def is_spot_fleet_running(self):
+        response = self.ec2_client.describe_spot_fleet_instances()
+        logger.info(f'Spot Fleet Response: {response}')
+        for req in response.get("SpotFleetRequestConfigs", []):
+            state = req["SpotFleetRequestState"]
+            if state in ("active", "submitted", "modifying"):  # still alive
+                logger.info(f"Existing spot fleet found: {req['SpotFleetRequestId']} (state={state})")
+                return True
+        return False
 
     def request_spot_fleet(self):
         logger.info("Requesting spot fleet...")
@@ -53,7 +59,7 @@ class OrchestrationManager:
             logger.info(f"Total Tasks: {tasks_count}")
 
             if tasks_count > 0:
-                if not fleet_id or not self.is_spot_fleet_running(fleet_id):
+                if not fleet_id or not self.is_spot_fleet_running():
                     fleet_id = self.request_spot_fleet()
             else:
                 logger.info("No tasks in queue. Waiting...")
