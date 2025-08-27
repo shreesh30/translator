@@ -8,7 +8,6 @@ User=$user
 WorkingDirectory=$working_directory
 Environment=PYTHONPATH=$working_directory
 ExecStart=$exec_start
-Restart=always
 
 [Install]
 WantedBy=multi-user.target
