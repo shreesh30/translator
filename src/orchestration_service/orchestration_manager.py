@@ -118,6 +118,7 @@ class OrchestrationManager:
 
             # Check the fleet's status
             status = self.check_fleet_status(fleet_id)
+            logger.info(f'Fleet Id: {fleet_id}, Status: {status}')
 
             if status == FleetStatus.ACTIVE:
                 logger.info(f"Spot Fleet {fleet_id} is active.")
@@ -127,6 +128,6 @@ class OrchestrationManager:
                 fleet_id = None  # Reset to try again
                 time.sleep(retry_interval)
             elif status in (FleetStatus.PENDING, FleetStatus.UNKNOWN):
-                logger.info(f"Fleet {fleet_id} in {status} state. Checking again in {retry_interval}s...")
+                logger.info(f"Spot Fleet {fleet_id} {status.value}. Checking again in {retry_interval}s...")
                 time.sleep(retry_interval)
 
