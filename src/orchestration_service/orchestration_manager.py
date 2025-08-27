@@ -28,7 +28,7 @@ class OrchestrationManager:
         return message_count
 
     def is_spot_fleet_running(self):
-        response = self.ec2_client.describe_spot_fleet_requests()
+        response = self.ec2_client.describe_spot_fleet_instances()
         logger.info(f'Spot Fleet Response: {response}')
         for req in response.get("SpotFleetRequestConfigs", []):
             state = req["SpotFleetRequestState"]
@@ -43,27 +43,64 @@ class OrchestrationManager:
 
         with open(config_path, "r") as f:
             config = json.load(f)
-        response = self.ec2_client.request_spot_fleet(
-            SpotFleetRequestConfig=config
-        )
-        fleet_id = response["SpotFleetRequestId"]
-        logger.info(f"Spot Fleet Requested: {fleet_id}")
-        return fleet_id
 
-    def run(self):
-        logger.info("Starting OrchestrationManager...")
+        try:
+            response = self.ec2_client.request_spot_fleet(
+                SpotFleetRequestConfig=config
+            )
+            fleet_id = response["SpotFleetRequestId"]
+            logger.info(f"Spot Fleet Requested: {fleet_id}")
+            return fleet_id
+        except self.ec2_client.exceptions.ClientError as e:
+            logger.error(f"Failed to request spot fleet: {e}")
+            return None
+
+    def check_fleet_status(self, fleet_id):
+        """Check the Spot Fleet request status.
+        Returns True if active, False if failed/cancelled, None if pending.
+        """
+        try:
+            response = self.ec2_client.describe_spot_fleet_requests(SpotFleetRequestIds=[fleet_id])
+            state = response['SpotFleetRequestConfigs'][0]['SpotFleetRequestState']
+            logger.info(f"Fleet {fleet_id} status: {state}")
+
+            if state == "active":
+                return True
+            elif state in ["failed", "cancelled"]:
+                return False
+            else:  # submitted, pending_fulfillment
+                return None
+
+        except self.ec2_client.exceptions.ClientError as e:
+            logger.error(f"Failed to describe fleet {fleet_id}: {e}")
+            return False
+
+    def run(self, retry_interval=30):
+        """Continuously try to request a Spot Fleet until it becomes active."""
         fleet_id = None
+        fleet_active = False
 
-        while True:
-            tasks_count = self.get_task_count()
-            logger.info(f"Total Tasks: {tasks_count}")
+        while not fleet_active:
+            # Step 1: Request a new fleet if we don't have one
+            if fleet_id is None:
+                fleet_id = self.request_spot_fleet()
+                if fleet_id is None:
+                    logger.info(f"Request failed. Retrying in {retry_interval}s...")
+                    time.sleep(retry_interval)
+                    continue
 
-            if tasks_count > 0:
-                if not fleet_id or not self.is_spot_fleet_running():
-                    fleet_id = self.request_spot_fleet()
-            else:
-                logger.info("No tasks in queue. Waiting...")
+            # Step 2: Check the fleet's status
+            status = self.check_fleet_status(fleet_id)
 
-            time.sleep(30)  # check every 30 seconds
+            if status is True:
+                logger.info(f"Spot Fleet {fleet_id} is active")
+                fleet_active = True
+            elif status is False:
+                logger.warning(f"Spot Fleet {fleet_id} failed. Sending a new request...")
+                fleet_id = None  # Reset to try again in the next iteration
+                time.sleep(retry_interval)
+            else:  # Status is pending
+                logger.info(f"Fleet {fleet_id} pending. Waiting {retry_interval}s before checking again...")
+                time.sleep(retry_interval)
 
 
