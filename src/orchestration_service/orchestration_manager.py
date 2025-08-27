@@ -36,15 +36,15 @@ class OrchestrationManager:
 
         return message_count
 
-    def is_spot_fleet_running(self):
-        response = self.ec2_client.describe_spot_fleet_instances()
-        logger.info(f'Spot Fleet Response: {response}')
-        for req in response.get("SpotFleetRequestConfigs", []):
-            state = req["SpotFleetRequestState"]
-            if state in ("active", "submitted", "modifying"):  # still alive
-                logger.info(f"Existing spot fleet found: {req['SpotFleetRequestId']} (state={state})")
-                return True
-        return False
+    # def is_spot_fleet_running(self):
+    #     response = self.ec2_client.describe_spot_fleet_instances()
+    #     logger.info(f'Spot Fleet Response: {response}')
+    #     for req in response.get("SpotFleetRequestConfigs", []):
+    #         state = req["SpotFleetRequestState"]
+    #         if state in ("active", "submitted", "modifying"):  # still alive
+    #             logger.info(f"Existing spot fleet found: {req['SpotFleetRequestId']} (state={state})")
+    #             return True
+    #     return False
 
     def request_spot_fleet(self):
         logger.info("Requesting spot fleet...")
@@ -103,9 +103,20 @@ class OrchestrationManager:
             logger.error(f"Failed to describe fleet {fleet_id}: {e}")
             return FleetStatus.ERROR
 
+    def get_existing_fleet_id(self):
+        """Return the first active or pending fleet ID if one exists, otherwise None."""
+        response = self.ec2.describe_spot_fleet_requests()  # boto3 client call
+        for req in response.get("SpotFleetRequestConfigs", []):
+            state = req["SpotFleetRequestState"]
+            if state in ("active", "submitted", "modifying"):
+                fleet_id = req["SpotFleetRequestId"]
+                logger.info(f"Found existing Spot Fleet: {fleet_id} ({state})")
+                return fleet_id
+        return None
+
     def run(self, retry_interval=30):
         """Continuously try to request a Spot Fleet until it becomes active."""
-        fleet_id = None
+        fleet_id = self.get_existing_fleet_id()
 
         while True:
             # Request a new fleet if we don't have one
