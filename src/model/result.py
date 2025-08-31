@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, List
+from typing import List, Any, Optional
 
 from src.model.document_metadata import DocumentMetadata
 from src.model.element import Element
@@ -8,11 +8,11 @@ from src.service.document_processor import DocumentProcessor
 
 
 @dataclass
-class Task:
+class Result:
     id: str
     element: Element
     filename: str
-    meta_data: DocumentMetadata
     language_config: LanguageConfig
     chunk_index: int
     total_chunks: int
+    meta_data: DocumentMetadata

@@ -28,7 +28,7 @@ class OrchestrationManager:
 
     @staticmethod
     def get_task_count():
-        producer = RabbitMQProducer(host=Utils.KEY_LOCALHOST, queue=Utils.QUEUE_TASKS)
+        producer = RabbitMQProducer(host=Utils.KEY_RABBITMQ_LOCALHOST, queue=Utils.QUEUE_TASKS)
         producer.connect()
         queue_info = producer.get_queue_info(Utils.QUEUE_TASKS)
         message_count = queue_info.method.message_count

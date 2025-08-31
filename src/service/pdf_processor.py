@@ -6,6 +6,7 @@ from concurrent.futures import as_completed
 from concurrent.futures.thread import ThreadPoolExecutor
 from dataclasses import asdict
 
+from src.model.document_metadata import DocumentMetadata
 from src.model.task import Task
 from src.service.document_processor import DocumentProcessor
 from src.service.rabbitmq_producer import RabbitMQProducer
@@ -19,7 +20,7 @@ class PDFProcessor:
     def __init__(self, lang_configs, input_path):
         self.lang_configs = lang_configs
         self.input_path = input_path
-        self.producer = RabbitMQProducer(host=Utils.KEY_LOCALHOST, queue= Utils.QUEUE_TASKS)
+        self.producer = RabbitMQProducer(host=Utils.KEY_RABBITMQ_LOCALHOST, queue= Utils.QUEUE_TASKS)
         self.producer.connect()
 
     def process_all_pdfs(self):
@@ -47,12 +48,13 @@ class PDFProcessor:
             processor.process_document()
             elements = processor.get_elements()
             total_chunks = len(elements)
-
+            extracted_page_number, page_number_start = processor.get_page_number_info()
+            metadata= DocumentMetadata(paragraph_start=processor.get_paragraph_start(),pages=processor.get_pages(),extracted_page_number=extracted_page_number, page_number_start=page_number_start)
 
             for language_config in self.lang_configs:
                 task_id = uuid.uuid4().hex
                 for idx, element in enumerate(elements):
-                    task = Task(id=task_id, element = element, language_config=language_config, filename=filename, chunk_index=idx, total_chunks=total_chunks)
+                    task = Task(id=task_id, element = element, language_config=language_config, filename=filename, chunk_index=idx, total_chunks=total_chunks, meta_data=metadata)
                     task_json = json.dumps(asdict(task), cls=CustomJSONEncoder) # type: ignore[arg-type]
                     self.producer.publish(task_json)
                     logger.info(f"Queued chunk {idx+1}/{total_chunks} for {filename} in {language_config.get_target_language()} (task_id={task_id})")

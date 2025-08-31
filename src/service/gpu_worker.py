@@ -1,6 +1,8 @@
+import json
 import logging
 import re
-from multiprocessing import Process, Queue
+from dataclasses import asdict
+from multiprocessing import Process
 
 import fitz
 import torch
@@ -12,34 +14,40 @@ from src.model.footer import Footer
 from src.model.language_config import LanguageConfig
 from src.model.line import Line
 from src.model.paragraph import Paragraph
+from src.model.result import Result
 from src.model.table import Table
 from src.model.task import Task
-from src.model.task_result import TaskResult
-from src.service.document_processor import DocumentProcessor
+from src.service.rabbitmq_consumer import RabbitMQConsumer
+from src.service.rabbitmq_producer import RabbitMQProducer
+from src.utils.custom_encoder import CustomJSONEncoder
 from src.utils.utils import Utils
 
-logger = logging.getLogger("gpu_worker")
+logger = logging.getLogger(__name__)
 
 
 class GPUWorker(Process):
-    def __init__(self, input_queue: Queue, output_queue: Queue, model_name: str, quantization: str):
+    def __init__(self, model_name: str, quantization: str):
         super().__init__()
-        self.input_queue = input_queue
-        self.output_queue = output_queue
         self.model_name = model_name
         self.tokenizer = None
         self.model = None
         self.quantization = quantization
         self.processor = None
         self.tags = None
+        self.producer = RabbitMQProducer(host=Utils.KEY_RABBITMQ_HOST, queue=Utils.QUEUE_RESULTS)
+        self.consumer = RabbitMQConsumer(host=Utils.KEY_RABBITMQ_HOST, queue=Utils.QUEUE_TASKS)
+        self.producer.connect()
+        self.consumer.connect()
+
 
     @staticmethod
     def is_tag(word: str) -> bool:
         return re.fullmatch(r'</?\w+>', word.strip()) is not None
 
-    def split_into_lines(self, para_text, paragraph, document_processor, language_config):
+    def split_into_lines(self, para_text, paragraph, task):
         """Splits text into lines using accurate point/inch measurements"""
         font_size = paragraph.get_font_size()
+        language_config = task.language_config
 
         # 1. Get font metrics in points
         font_size_pt = font_size * language_config.get_font_size_multiplier()
@@ -50,10 +58,13 @@ class GPUWorker(Process):
         max_width_pt = Utils.USABLE_PAGE_WIDTH * 72
 
         # 3. Language-aware splitting
-        return self._split_words(para_text, font, max_width_pt, paragraph, document_processor)
+        return self._split_words(para_text, font, max_width_pt, paragraph, task)
 
-    def _split_words(self ,text, font, max_width_pt, paragraph, document_processor):
+    def _split_words(self ,text, font, max_width_pt, paragraph, task):
         """Splits space-separated languages using accurate width measurements."""
+        meta_data = task.meta_data
+        paragraph_start = meta_data.paragraph_start
+
         words = text.split()
         lines = []
         current_line = []
@@ -63,7 +74,7 @@ class GPUWorker(Process):
         tab_width = 4 * space_width
 
         para_indent = (
-            tab_width if int(paragraph.get_para_bbox().x0) == document_processor.get_paragraph_start()
+            tab_width if int(paragraph.get_para_bbox().x0) == paragraph_start
             else 0
         )
 
@@ -127,8 +138,9 @@ class GPUWorker(Process):
         bbox = font.getbbox(line_copy)
         return fitz.Rect(bbox)
 
-    def translate_paragraph(self,paragraph : Paragraph, document_processor: DocumentProcessor, language_config: LanguageConfig):
+    def translate_paragraph(self,paragraph : Paragraph, task):
         try:
+            language_config = task.language_config
             # 1. Apply invisible style markers
             target_language_key  = language_config.get_target_language_key()
             source_language_key = language_config.get_source_language_key()
@@ -139,7 +151,7 @@ class GPUWorker(Process):
 
             logger.info(f'Translated Text: {translated_text}')
 
-            lines = self.split_into_lines(translated_text, paragraph, document_processor, language_config)
+            lines = self.split_into_lines(translated_text, paragraph, task)
 
             new_lines=[]
             for line in lines:
@@ -155,7 +167,7 @@ class GPUWorker(Process):
             if paragraph.get_sub_paragraphs():
                 sub_para = []
                 for para in paragraph.get_sub_paragraphs():
-                    sub_para.append(self.translate_paragraph(para, document_processor, language_config))
+                    sub_para.append(self.translate_paragraph(para, task))
                 paragraph.set_sub_paragraphs(sub_para)
 
             if paragraph.get_footer():
@@ -317,38 +329,43 @@ class GPUWorker(Process):
         self.model = torch.compile(self.model.eval())
         logger.info("Model initialized successfully")
 
+    def process_message(self,ch, method, properties, body):
+        try:
+            data = json.loads(body.decode("utf-8"))  # if messages are JSON
+            logging.info(f"[Consumer] Received: {data}")
+
+            task = Task(**data)
+            logger.info(f"[GPUWorker] Received task {task.id}, chunk {task.chunk_index + 1}/{task.total_chunks}")
+
+            element = task.element
+
+            if isinstance(element, Paragraph):
+                self.translate_paragraph(element, task)
+            elif isinstance(element, Table):
+                self.translate_table(element, task.language_config)
+
+            result = Result(
+                    id=task.id,
+                    element=element,
+                    language_config=task.language_config,
+                    filename=task.filename,
+                    chunk_index=task.chunk_index,
+                    total_chunks = task.total_chunks,
+                    meta_data= task.meta_data
+                )
+
+            result_json = json.dumps(asdict(result), cls=CustomJSONEncoder) # type: ignore[arg-type]
+            self.producer.publish(result_json)
+
+            # Acknowledge after processing
+            ch.basic_ack(delivery_tag=method.delivery_tag)
+            logging.info("[Consumer] Message acknowledged")
+        except Exception as e:
+            logger.error(f"[GPUWorker] Error: {e}")
+            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+
     def run(self):
         logger.info("[GPUWorker] Starting and loading model...")
         self._init_model()
 
-        while True:
-            task: Task = self.input_queue.get()
-            logger.info(f'Input Task: {task}')
-
-            language_configs = task.language_configs
-            elements = task.elements
-            filename = task.filename
-            document_processor = task.processor
-
-            try:
-                for language_config in language_configs:
-                    for element in elements:
-                        if isinstance(element, Paragraph):
-                            self.translate_paragraph(element, document_processor, language_config)
-                        elif isinstance(element, Table):
-                            self.translate_table(element, language_config)
-
-                    language = language_config.get_target_language()
-                    task_result = TaskResult(elements = elements, language= language, language_config= language_config,filename=filename, document_processor=document_processor)
-
-                    self.output_queue.put(task_result)
-            except Exception as e:
-                error_result = TaskResult(
-                    elements=[],
-                    language="unknown",
-                    language_config=None,
-                    filename=filename,
-                    document_processor=None,
-                    error=str(e)
-                )
-                self.output_queue.put(error_result)
+        self.consumer.consume(callback=self.process_message)

@@ -7,7 +7,7 @@ from src.utils.utils import Utils
 
 
 def run_pdf_processor(lang_configs, input_path):
-    logger = logging.getLogger("ingestion_service")
+    logger = logging.getLogger(Utils.INGESTION_SERVICE)
 
     # Start processing PDFs
     logger.info("Starting PDF processing with input path: %s", input_path)
@@ -18,7 +18,7 @@ def run_pdf_processor(lang_configs, input_path):
     processor.process_all_pdfs()
 
 if __name__ == "__main__":
-    Utils.setup_logging("ingestion_service.log")
+    Utils.setup_logging(f"{Utils.INGESTION_SERVICE}.log")
     # input_pdf_path = "resource/input/pdf-complete"  # Replace with your file
     input_pdf_path = "resource/tmp"               # Replace with your file
     output_pdf_path = "resource/output"  # Output filename

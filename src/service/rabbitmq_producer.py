@@ -3,6 +3,8 @@ import logging
 
 import pika
 
+from src.utils.utils import Utils
+
 
 class RabbitMQProducer:
     def __init__(self, queue,host='localhost', durable=True):
@@ -23,7 +25,8 @@ class RabbitMQProducer:
         Connects to RabbitMQ and declares the queue.
         """
         try:
-            params = pika.ConnectionParameters(host=self.host)
+            credentials = pika.PlainCredentials(Utils.KEY_USER, Utils.KEY_PASSWORD)
+            params = pika.ConnectionParameters(host=self.host, credentials=credentials)
             self.connection = pika.BlockingConnection(params)
             self.channel = self.connection.channel()
             self.channel.queue_declare(queue=self.queue, durable=self.durable)
