@@ -45,7 +45,7 @@ class Utils:
 
     @staticmethod
     def generate_service_file(service_name, description, user, working_directory, exec_start):
-        template_path = os.path.join(os.path.dirname(__file__), "src", "templates", "service_template.service")
+        template_path = os.path.join( "src", "templates", "service_template.service")
 
         # Load the template file
         with open(template_path, "r") as f:
