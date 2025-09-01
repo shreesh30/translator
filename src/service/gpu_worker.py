@@ -22,7 +22,7 @@ from src.service.rabbitmq_producer import RabbitMQProducer
 from src.utils.custom_encoder import CustomJSONEncoder
 from src.utils.utils import Utils
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(Utils.TRANSLATION_SERVICE)
 
 
 class GPUWorker(Process):
