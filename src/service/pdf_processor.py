@@ -20,8 +20,6 @@ class PDFProcessor:
     def __init__(self, lang_configs, input_path):
         self.lang_configs = lang_configs
         self.input_path = input_path
-        self.producer = RabbitMQProducer(host=Utils.KEY_RABBITMQ_LOCALHOST, queue= Utils.QUEUE_TASKS)
-        self.producer.connect()
 
     def process_all_pdfs(self):
         pdf_files = [f for f in os.listdir(self.input_path) if f.endswith(".pdf")]
@@ -39,9 +37,10 @@ class PDFProcessor:
                 except Exception as e:
                     logger.error(f"Error processing a file: {e}")
 
-        self.producer.close()
-
     def process_single_pdf(self, filename):
+        producer = RabbitMQProducer(host=Utils.KEY_RABBITMQ_LOCALHOST, queue=Utils.QUEUE_TASKS)
+        producer.connect()
+
         try:
             file_path = os.path.join(self.input_path, filename)
             processor = DocumentProcessor(file_path)
@@ -56,8 +55,10 @@ class PDFProcessor:
                 for idx, element in enumerate(elements):
                     task = Task(id=task_id, element = element, language_config=language_config, filename=filename, chunk_index=idx, total_chunks=total_chunks, meta_data=metadata)
                     task_json = json.dumps(asdict(task), cls=CustomJSONEncoder) # type: ignore[arg-type]
-                    self.producer.publish(task_json)
+                    producer.publish(task_json)
                     logger.info(f"Queued chunk {idx+1}/{total_chunks} for {filename} in {language_config.get_target_language()} (task_id={task_id})")
 
         except Exception as e:
             logger.error(f"Error processing {filename}: {e}")
+        finally:
+            producer.close()

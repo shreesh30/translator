@@ -27,7 +27,7 @@ class RabbitMQConsumer:
         """
         try:
             credentials = pika.PlainCredentials(Utils.KEY_USER, Utils.KEY_PASSWORD)
-            params = pika.ConnectionParameters(host=self.host, credentials=credentials)
+            params = pika.ConnectionParameters(host=self.host, credentials=credentials, heartbeat=120,blocked_connection_timeout=300)
             self.connection = pika.BlockingConnection(params)
             self.channel = self.connection.channel()
             self.channel.queue_declare(queue=self.queue, durable=self.durable)

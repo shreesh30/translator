@@ -34,9 +34,7 @@ class GPUWorker(Process):
         self.quantization = quantization
         self.processor = None
         self.tags = None
-        self.producer = RabbitMQProducer(host=Utils.KEY_RABBITMQ_HOST, queue=Utils.QUEUE_RESULTS)
         self.consumer = RabbitMQConsumer(host=Utils.KEY_RABBITMQ_HOST, queue=Utils.QUEUE_TASKS)
-        self.producer.connect()
         self.consumer.connect()
 
 
@@ -330,6 +328,8 @@ class GPUWorker(Process):
         logger.info("Model initialized successfully")
 
     def process_message(self,ch, method, properties, body):
+        producer = RabbitMQProducer(host=Utils.KEY_RABBITMQ_HOST, queue=Utils.QUEUE_RESULTS)
+        producer.connect()
         try:
             data = json.loads(body.decode("utf-8"))  # if messages are JSON
             logging.info(f"[Consumer] Received: {data}")
@@ -355,7 +355,7 @@ class GPUWorker(Process):
                 )
 
             result_json = json.dumps(asdict(result), cls=CustomJSONEncoder) # type: ignore[arg-type]
-            self.producer.publish(result_json)
+            producer.publish(result_json)
 
             # Acknowledge after processing
             ch.basic_ack(delivery_tag=method.delivery_tag)
@@ -363,6 +363,8 @@ class GPUWorker(Process):
         except Exception as e:
             logger.error(f"[GPUWorker] Error: {e}")
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+        finally:
+            producer.close()
 
     def run(self):
         logger.info("[GPUWorker] Starting and loading model...")
