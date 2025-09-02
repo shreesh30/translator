@@ -1,6 +1,9 @@
 import json
 import logging
+import time
+
 import pika
+from pika.exceptions import AMQPConnectionError
 
 from src.utils.utils import Utils
 
@@ -25,17 +28,19 @@ class RabbitMQConsumer:
         """
         Connects to RabbitMQ and declares the queue.
         """
-        try:
-            credentials = pika.PlainCredentials(Utils.KEY_USER, Utils.KEY_PASSWORD)
-            params = pika.ConnectionParameters(host=self.host, credentials=credentials, heartbeat=120,blocked_connection_timeout=300)
-            self.connection = pika.BlockingConnection(params)
-            self.channel = self.connection.channel()
-            self.channel.queue_declare(queue=self.queue, durable=self.durable)
-            self.channel.basic_qos(prefetch_count=self.prefetch_count)
-            logging.info(f"[Consumer] Connected to RabbitMQ at {self.host}, queue={self.queue}")
-        except Exception as e:
-            logging.error(f"[Consumer] Connection failed: {e}")
-            raise
+        while True:
+            try:
+                credentials = pika.PlainCredentials(Utils.KEY_USER, Utils.KEY_PASSWORD)
+                params = pika.ConnectionParameters(host=self.host, credentials=credentials, heartbeat=120,blocked_connection_timeout=300)
+                self.connection = pika.BlockingConnection(params)
+                self.channel = self.connection.channel()
+                self.channel.queue_declare(queue=self.queue, durable=self.durable)
+                self.channel.basic_qos(prefetch_count=self.prefetch_count)
+                logging.info(f"[Consumer] Connected to RabbitMQ at {self.host}")
+                return
+            except Exception as e:
+                logging.error(f"[Consumer] Connection failed: {e}. Retrying in 5s...")
+                time.sleep(5)
 
     def consume(self, callback, auto_ack=False):
         """
@@ -44,20 +49,26 @@ class RabbitMQConsumer:
                          Signature: callback(ch, method, properties, body)
         :param auto_ack: If True, messages are auto-acknowledged.
         """
-        if not self.channel:
-            raise RuntimeError("RabbitMQ connection not established. Call connect() first.")
+        while True:
+            try:
+                if not self.connection or self.connection.is_closed:
+                    self.connect()
 
-        self.channel.basic_consume(
-            queue=self.queue,
-            on_message_callback=callback,
-            auto_ack=auto_ack
-        )
-        logging.info(f"[Consumer] Waiting for messages on {self.queue}...")
-        try:
-            self.channel.start_consuming()
-        except KeyboardInterrupt:
-            logging.info("[Consumer] Stopped manually")
-            self.close()
+                self.channel.basic_consume(
+                    queue=self.queue,
+                    on_message_callback=callback,
+                    auto_ack=auto_ack
+                )
+                logging.info(f"[Consumer] Waiting for messages on {self.queue}...")
+
+                self.channel.start_consuming()
+
+            except AMQPConnectionError as e:
+                logging.error(f"[Consumer] Lost connection: {e}, reconnecting...")
+                time.sleep(5)
+            except Exception as e:
+                logging.error(f"[Consumer] Unexpected error: {e}, reconnecting...")
+                time.sleep(5)
 
     def close(self):
         """
