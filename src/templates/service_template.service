@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-User=$user
+User=root
 WorkingDirectory=$working_directory
 Environment=PYTHONPATH=$working_directory
 ExecStart=$exec_start
