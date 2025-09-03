@@ -34,9 +34,6 @@ class GPUWorker(Process):
         self.quantization = quantization
         self.processor = None
         self.tags = None
-        self.consumer = RabbitMQConsumer(host=Utils.KEY_RABBITMQ_HOST, queue=Utils.QUEUE_TASKS)
-        self.consumer.connect()
-
 
     @staticmethod
     def is_tag(word: str) -> bool:
@@ -329,8 +326,9 @@ class GPUWorker(Process):
 
     def process_message(self,ch, method, properties, body):
         producer = RabbitMQProducer(host=Utils.KEY_RABBITMQ_HOST, queue=Utils.QUEUE_RESULTS)
-        producer.connect()
+
         try:
+            producer.connect()
             data = json.loads(body.decode("utf-8"))  # if messages are JSON
             logging.info(f"[Consumer] Received: {data}")
 
@@ -370,4 +368,10 @@ class GPUWorker(Process):
         logger.info("[GPUWorker] Starting and loading model...")
         self._init_model()
 
-        self.consumer.consume(callback=self.process_message)
+        consumer = RabbitMQConsumer(host=Utils.KEY_RABBITMQ_HOST, queue=Utils.QUEUE_TASKS)
+
+        try:
+            consumer.connect()
+            consumer.consume(callback=self.process_message)
+        finally:
+            consumer.close()

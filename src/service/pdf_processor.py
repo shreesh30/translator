@@ -39,9 +39,9 @@ class PDFProcessor:
 
     def process_single_pdf(self, filename):
         producer = RabbitMQProducer(host=Utils.KEY_RABBITMQ_LOCALHOST, queue=Utils.QUEUE_TASKS)
-        producer.connect()
 
         try:
+            producer.connect()
             file_path = os.path.join(self.input_path, filename)
             processor = DocumentProcessor(file_path)
             processor.process_document()
