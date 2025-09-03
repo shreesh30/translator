@@ -1,6 +1,7 @@
 import logging
 import os
 import subprocess
+from logging.handlers import RotatingFileHandler
 from string import Template
 
 
@@ -31,17 +32,26 @@ class Utils:
     # SERVICES
     INGESTION_SERVICE = 'ingestion_service'
     TRANSLATION_SERVICE = 'translation_service'
+    BUILDER_SERVICE = 'builder_service'
 
     @staticmethod
-    def setup_logging(log_file_name: str):
-        """Configure logging to a file for the current process."""
+    def setup_logging(log_file_name: str, max_bytes=10 * 1024 * 1024, backup_count=5):
+        """Configure logging with rotation based on file size."""
         os.makedirs("logs", exist_ok=True)
-        logging.basicConfig(
-            filename=os.path.join("logs", log_file_name),
-            level=logging.DEBUG,
-            format="%(asctime)s [%(levelname)s] %(processName)s - %(message)s",
-            force=True  # override inherited loggers
+        log_path = os.path.join("logs", log_file_name)
+
+        handler = RotatingFileHandler(
+            log_path, maxBytes=max_bytes, backupCount=backup_count
         )
+        formatter = logging.Formatter(
+            "%(asctime)s [%(levelname)s] %(processName)s - %(message)s"
+        )
+        handler.setFormatter(formatter)
+
+        logger = logging.getLogger()
+        logger.setLevel(logging.DEBUG)
+        logger.handlers = []  # clear existing handlers
+        logger.addHandler(handler)
 
     @staticmethod
     def generate_service_file(service_name, description, user, working_directory, exec_start):

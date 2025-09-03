@@ -2,7 +2,6 @@ from dataclasses import dataclass, field
 from typing import List
 
 from src.model.element import Element
-from src.model.footer import Footer
 from src.model.line import Line
 from src.utils.utils import Utils
 
@@ -13,7 +12,6 @@ class Table(Element):
     sub_title: Line = field(default_factory=Line)
     rows: List[Line] = field(default_factory=list)
     columns: List[List[Line]] = field(default_factory=list)
-    page_number: Footer = field(default_factory=Footer)
     chapter: str = field(default_factory=str)
     volume: str = field(default_factory=str)
     content_table: bool = field(default_factory=bool)
@@ -27,8 +25,8 @@ class Table(Element):
     def set_sub_title(self, sub_title):
         self.sub_title = sub_title
 
-    def set_page_number(self, page_number):
-        self.page_number = page_number
+    # def set_page_number(self, page_number):
+    #     self.page_number = page_number
 
     def add_column(self, column):
         self.columns.append(column)
@@ -51,8 +49,8 @@ class Table(Element):
     def get_sub_title(self):
         return self.sub_title
 
-    def get_page_number(self):
-        return self.page_number
+    # def get_page_number(self):
+    #     return self.page_number
 
     def get_columns(self):
         return self.columns
