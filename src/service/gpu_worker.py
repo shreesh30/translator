@@ -9,6 +9,7 @@ import torch
 from IndicTransToolkit.processor import IndicProcessor
 from PIL import ImageFont
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, BitsAndBytesConfig
+from dacite import from_dict
 
 from src.model.footer import Footer
 from src.model.language_config import LanguageConfig
@@ -332,7 +333,8 @@ class GPUWorker(Process):
             data = json.loads(body.decode("utf-8"))  # if messages are JSON
             logging.info(f"[Consumer] Received: {data}")
 
-            task = Task(**data)
+            task = from_dict(Task, data)
+            logger.info(f'Task Received: {task}')
             logger.info(f"[GPUWorker] Received task {task.id}, chunk {task.chunk_index + 1}/{task.total_chunks}")
 
             element = task.element
