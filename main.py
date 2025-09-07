@@ -1,9 +1,14 @@
 import argparse
 import os
+import shutil
 
 from src.utils.utils import Utils
 
 if __name__ == "__main__":
+    # Remove all the logs
+    if os.path.exists(Utils.LOG_DIR):
+        shutil.rmtree(Utils.LOG_DIR)
+
     parser = argparse.ArgumentParser(description="Setup services")
     parser.add_argument(
         "service",

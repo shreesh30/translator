@@ -509,8 +509,8 @@ class Page:
             text = line.get_text()
 
             if self.is_roman_numeral(text):
-            #     footer = Footer(text, line.get_font_size())
-            #     table.set_page_number(footer)
+                footer = Footer(text, line.get_font_size())
+                table.set_page_number(footer)
                 continue
 
             if not table.get_title().get_text():
