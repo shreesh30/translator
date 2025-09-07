@@ -37,10 +37,11 @@ class Utils:
     # DIRECTORY
     LOG_DIR = 'logs'
 
-    def setup_logging(self,log_file_name: str, max_bytes=10 * 1024 * 1024, backup_count=5):
+    @staticmethod
+    def setup_logging(log_file_name: str, max_bytes=10 * 1024 * 1024, backup_count=5):
         """Configure logging with rotation based on file size."""
-        os.makedirs(self.LOG_DIR, exist_ok=True)
-        log_path = os.path.join(self.LOG_DIR, log_file_name)
+        os.makedirs(Utils.LOG_DIR, exist_ok=True)
+        log_path = os.path.join(Utils.LOG_DIR, log_file_name)
 
         handler = RotatingFileHandler(
             log_path, maxBytes=max_bytes, backupCount=backup_count
