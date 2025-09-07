@@ -31,6 +31,7 @@ class GPUWorker(Process):
         self.quantization = quantization
         self.processor = None
         self.tags = None
+        self.producer = None
 
     @staticmethod
     def is_tag(word: str) -> bool:
@@ -324,49 +325,49 @@ class GPUWorker(Process):
         logger.info("Model initialized successfully")
 
     def process_message(self,ch, method, properties, body):
-        producer = RabbitMQProducer(host=Utils.KEY_RABBITMQ_HOST, queue=Utils.QUEUE_RESULTS)
+        if self.producer:
+            try:
+                task = pickle.loads(body)
+                logging.info(f"[Consumer] Received: {task}")
 
-        try:
-            producer.connect()
-            task = pickle.loads(body)
-            logging.info(f"[Consumer] Received: {task}")
+                logger.info(f"[GPUWorker] Received task {task.id}, chunk {task.chunk_index + 1}/{task.total_chunks}")
 
-            logger.info(f"[GPUWorker] Received task {task.id}, chunk {task.chunk_index + 1}/{task.total_chunks}")
+                element = task.element
 
-            element = task.element
+                if isinstance(element, Paragraph):
+                    self.translate_paragraph(element, task)
+                elif isinstance(element, Table):
+                    self.translate_table(element, task.language_config)
 
-            if isinstance(element, Paragraph):
-                self.translate_paragraph(element, task)
-            elif isinstance(element, Table):
-                self.translate_table(element, task.language_config)
+                result = Result(
+                        id=task.id,
+                        element=element,
+                        language_config=task.language_config,
+                        filename=task.filename,
+                        chunk_index=task.chunk_index,
+                        total_chunks = task.total_chunks,
+                        meta_data= task.meta_data
+                    )
 
-            result = Result(
-                    id=task.id,
-                    element=element,
-                    language_config=task.language_config,
-                    filename=task.filename,
-                    chunk_index=task.chunk_index,
-                    total_chunks = task.total_chunks,
-                    meta_data= task.meta_data
-                )
+                result_body = pickle.dumps(result)
+                self.producer.publish(result_body)
 
-            result_body = pickle.dumps(result)
-            # result_json = json.dumps(asdict(result), cls=CustomJSONEncoder) # type: ignore[arg-type]
-            producer.publish(result_body)
-
-            # Acknowledge after processing
-            ch.basic_ack(delivery_tag=method.delivery_tag)
-            logging.info("[Consumer] Message acknowledged")
-        except Exception as e:
-            logger.error(f"[GPUWorker] Error: {e}")
-            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
-        finally:
-            producer.close()
+                # Acknowledge after processing
+                ch.basic_ack(delivery_tag=method.delivery_tag)
+                logging.info("[Consumer] Message acknowledged")
+            except Exception as e:
+                logger.error(f"[GPUWorker] Error: {e}")
+                ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
 
     def run(self):
         logger.info("[GPUWorker] Starting and loading model...")
         consumer = RabbitMQConsumer(host=Utils.KEY_RABBITMQ_HOST, queue=Utils.QUEUE_TASKS)
+        producer = RabbitMQProducer(host=Utils.KEY_RABBITMQ_HOST, queue=Utils.QUEUE_RESULTS)
+
         consumer.connect()
+        producer.connect()
+
+        self.producer = producer
 
         self._init_model()
 
@@ -374,3 +375,4 @@ class GPUWorker(Process):
             consumer.consume(callback=self.process_message)
         finally:
             consumer.close()
+            producer.close()
