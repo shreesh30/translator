@@ -15,7 +15,6 @@ logger = logging.getLogger('result_handler')
 class ResultHandler:
     def __init__(self):
         self.output_path = 'resource/output'
-        self.consumer = RabbitMQConsumer(host=Utils.KEY_RABBITMQ_LOCALHOST, queue=Utils.QUEUE_RESULTS)
         self.documents = {}
         self.lock = threading.Lock()  # protect shared dict
         self.executor = ThreadPoolExecutor(max_workers=4)
@@ -89,4 +88,10 @@ class ResultHandler:
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
 
     def run(self):
-        self.consumer.consume(callback=self.process_message)
+        consumer = RabbitMQConsumer(host=Utils.KEY_RABBITMQ_LOCALHOST, queue=Utils.QUEUE_RESULTS)
+
+        try:
+            consumer.connect()
+            consumer.consume(callback=self.process_message)
+        finally:
+            consumer.close()
