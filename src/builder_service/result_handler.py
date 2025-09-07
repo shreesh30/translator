@@ -6,7 +6,6 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from docx import Document
-from src.model.task_result import TaskResult
 
 from src.service.document_builder import DocumentBuilder
 from src.service.rabbitmq_consumer import RabbitMQConsumer
@@ -43,7 +42,6 @@ class ResultHandler:
             elements = [result.element for result in results]
             file_name = results[-1].filename
             language = language_config.target_language
-
 
             # Build the translated document
             doc = Document()
