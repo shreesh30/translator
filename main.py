@@ -1,6 +1,5 @@
 import argparse
 import os
-import shutil
 
 from src.utils.utils import Utils
 
@@ -49,6 +48,9 @@ if __name__ == "__main__":
     source_dir = os.path.join(working_dir, "src")
 
     for svc in services:
+        # --- Stop and delete existing service if running ---
+        Utils.terminate_service(svc["name"])
+
         exec_command = f"{working_dir}/venv/bin/python3 {os.path.join(source_dir, svc['script'])}"
 
         path = Utils.generate_service_file(

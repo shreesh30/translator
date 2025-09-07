@@ -109,3 +109,16 @@ class Utils:
         subprocess.run(["systemctl", "enable", service_name], check=True)
         subprocess.run(["systemctl", "start", service_name], check=True)
         print(f"Service '{service_name}' installed and started.")
+
+    @staticmethod
+    def terminate_service(service_name):
+        # Stop and delete existing service if running
+        try:
+            subprocess.run(["sudo", "systemctl", "stop", service_name], check=False)
+            subprocess.run(["sudo", "systemctl", "disable", service_name], check=False)
+            # Remove service file if it exists
+            service_file = f"/etc/systemd/system/{service_name}.service"
+            if os.path.exists(service_file):
+                os.remove(service_file)
+        except Exception as e:
+            print(f"Failed to stop/delete {service_name}: {e}")
