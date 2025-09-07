@@ -325,7 +325,7 @@ class GPUWorker(Process):
         logger.info("Model initialized successfully")
 
     def process_message(self,ch, method, properties, body):
-        if self.producer:
+        if self.producer is not None:
             try:
                 task = pickle.loads(body)
                 logging.info(f"[Consumer] Received: {task}")

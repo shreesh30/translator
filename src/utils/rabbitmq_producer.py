@@ -2,6 +2,7 @@ import json
 import logging
 
 import pika
+from pika.exceptions import ChannelClosed, AMQPConnectionError
 
 from src.utils.utils import Utils
 
@@ -35,16 +36,12 @@ class RabbitMQProducer:
             logging.error(f"[Producer] Connection failed: {e}")
             raise
 
-
     def publish(self, message, persistent=True):
         """
-        Publishes a message to the queue.
+        Publishes a message to the queue. Reconnects if channel is closed.
         :param message: Can be a dict or string.
         :param persistent: If True, message survives broker restarts.
         """
-        if not self.channel:
-            raise RuntimeError("RabbitMQ connection not established. Call connect() first.")
-
         if isinstance(message, dict):
             message = json.dumps(message)
 
@@ -52,13 +49,28 @@ class RabbitMQProducer:
             delivery_mode=2 if persistent else 1  # 2 = persistent, 1 = transient
         )
 
-        self.channel.basic_publish(
-            exchange='',
-            routing_key=self.queue,
-            body=message,
-            properties=properties
-        )
-        logging.info(f"[Producer] Message published to {self.queue}")
+        for attempt in range(2):  # try twice: first attempt, then reconnect once if fails
+            try:
+                if not self.channel or self.channel.is_closed:
+                    logging.warning("[Producer] Channel closed or missing. Reconnecting...")
+                    self.connect()
+
+                self.channel.basic_publish(
+                    exchange='',
+                    routing_key=self.queue,
+                    body=message,
+                    properties=properties
+                )
+                logging.info(f"[Producer] Message published to {self.queue}")
+                break  # success, exit loop
+
+            except (ChannelClosed, AMQPConnectionError) as e:
+                logging.warning(f"[Producer] Publish failed: {e}")
+                if attempt == 0:
+                    logging.info("[Producer] Attempting to reconnect and retry...")
+                    self.connect()
+                else:
+                    raise  # second attempt failed, propagate exception
 
     def get_queue_info(self, queue):
         if not self.channel:
