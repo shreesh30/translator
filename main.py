@@ -24,7 +24,11 @@ if __name__ == "__main__":
             "description": "Translation Service",
             "script": "translation_service/main.py"
         },
-    #     ADD RESULT HANDLER SERVICE
+        {
+            "name": Utils.BUILDER_SERVICE,
+            "description": "Builder Service",
+            "script": "builder_service/main.py"
+        },
     ]
 
     if args.service is None:

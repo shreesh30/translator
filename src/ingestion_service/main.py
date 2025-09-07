@@ -1,8 +1,8 @@
 import logging
 import os
 
+from src.ingestion_service.pdf_processor import PDFProcessor
 from src.model.language_config import LanguageConfig
-from src.service.pdf_processor import PDFProcessor
 from src.utils.utils import Utils
 
 
@@ -21,7 +21,6 @@ if __name__ == "__main__":
     Utils.setup_logging(f"{Utils.INGESTION_SERVICE}.log")
     # input_pdf_path = "resource/input/pdf-complete"  # Replace with your file
     input_pdf_path = "resource/tmp"               # Replace with your file
-    output_pdf_path = "resource/output"  # Output filename
 
     language_configs = [
         # LanguageConfig(target_language="Odia", target_language_key="ory_Orya",

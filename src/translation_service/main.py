@@ -1,7 +1,6 @@
 import logging
-import os
 
-from src.service.gpu_worker import GPUWorker
+from src.translation_service.gpu_worker import GPUWorker
 from src.utils.utils import Utils
 
 
