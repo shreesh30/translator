@@ -16,7 +16,7 @@ from src.model.language_config import LanguageConfig
 from src.model.page import Page
 from src.model.paragraph import Paragraph
 from src.model.table import Table
-from src.service.document_processor import DocumentProcessor
+from src.utils.document_processor import DocumentProcessor
 from src.utils.utils import Utils
 
 logger = logging.getLogger(__name__)

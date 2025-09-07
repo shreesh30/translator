@@ -1,8 +1,6 @@
-import json
 import logging
 import pickle
 import re
-from dataclasses import asdict
 from multiprocessing import Process
 
 import fitz
@@ -10,7 +8,6 @@ import torch
 from IndicTransToolkit.processor import IndicProcessor
 from PIL import ImageFont
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, BitsAndBytesConfig
-from dacite import from_dict
 
 from src.model.footer import Footer
 from src.model.language_config import LanguageConfig
@@ -18,10 +15,8 @@ from src.model.line import Line
 from src.model.paragraph import Paragraph
 from src.model.result import Result
 from src.model.table import Table
-from src.model.task import Task
-from src.service.rabbitmq_consumer import RabbitMQConsumer
-from src.service.rabbitmq_producer import RabbitMQProducer
-from src.utils.custom_encoder import CustomJSONEncoder
+from src.utils.rabbitmq_consumer import RabbitMQConsumer
+from src.utils.rabbitmq_producer import RabbitMQProducer
 from src.utils.utils import Utils
 
 logger = logging.getLogger(Utils.TRANSLATION_SERVICE)

@@ -1,8 +1,6 @@
-from dataclasses import dataclass, asdict
-from typing import List, Dict, Any
+from dataclasses import dataclass
 
-from src.model.page import Page
-from src.service.document_processor import DocumentProcessor
+from src.utils.document_processor import DocumentProcessor
 
 
 @dataclass

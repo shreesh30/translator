@@ -216,11 +216,11 @@ class DocumentProcessor:
                 paragraph.set_lines(new_main_lines)
 
     def get_page_number_info(self):
-        extracted_page_number = 0
-        page_number_start = 0
+        extracted_page_number = None
+        page_number_start = None
 
         for page in self.pages:
-            if page.get_extracted_page_number() and extracted_page_number==0:
+            if page.get_extracted_page_number() and extracted_page_number is None:
                 extracted_page_number = int(page.get_extracted_page_number())
                 page_number_start = page.get_page_number()
                 break

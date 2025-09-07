@@ -7,8 +7,8 @@ from concurrent.futures.thread import ThreadPoolExecutor
 
 from src.model.document_metadata import DocumentMetadata
 from src.model.task import Task
-from src.service.document_processor import DocumentProcessor
-from src.service.rabbitmq_producer import RabbitMQProducer
+from src.utils.document_processor import DocumentProcessor
+from src.utils.rabbitmq_producer import RabbitMQProducer
 from src.utils.utils import Utils
 
 logger = logging.getLogger(Utils.INGESTION_SERVICE)

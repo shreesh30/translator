@@ -7,8 +7,8 @@ from pathlib import Path
 
 from docx import Document
 
-from src.service.document_builder import DocumentBuilder
-from src.service.rabbitmq_consumer import RabbitMQConsumer
+from src.utils.document_builder import DocumentBuilder
+from src.utils.rabbitmq_consumer import RabbitMQConsumer
 from src.utils.utils import Utils
 
 logger = logging.getLogger('result_handler')
