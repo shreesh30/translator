@@ -3,6 +3,8 @@ import logging
 import time
 
 import pika
+
+from src.utils.heartbeat_thread import HeartbeatThread
 from src.utils.utils import Utils
 
 
@@ -19,6 +21,7 @@ class RabbitMQProducer:
         self.durable = durable
         self.connection = None
         self.channel = None
+        self.heartbeat_thread = None
 
     def connect(self):
         """
@@ -27,11 +30,17 @@ class RabbitMQProducer:
         while True:
             try:
                 credentials = pika.PlainCredentials(Utils.KEY_USER, Utils.KEY_PASSWORD)
-                params = pika.ConnectionParameters(host=self.host, credentials=credentials, heartbeat=1200, blocked_connection_timeout=1200)
+                params = pika.ConnectionParameters(host=self.host, credentials=credentials, heartbeat=60, blocked_connection_timeout=1800)
                 self.connection = pika.BlockingConnection(params)
                 self.channel = self.connection.channel()
                 self.channel.queue_declare(queue=self.queue, durable=self.durable)
                 logging.info(f"[Producer] Connected to RabbitMQ at {self.host}, queue={self.queue}")
+
+                # Start heartbeat thread
+                if self.heartbeat_thread is None:
+                    self.heartbeat_thread = HeartbeatThread(self.connection)
+                    self.heartbeat_thread.start()
+
                 return
             except Exception as e:
                 logging.error(f"[Producer] Connection failed: {e}")
@@ -68,6 +77,8 @@ class RabbitMQProducer:
         """
         Closes the connection to RabbitMQ.
         """
-        if self.connection:
+        if self.heartbeat_thread:
+            self.heartbeat_thread.stop()
+        if self.connection and self.connection.is_open:
             self.connection.close()
             logging.info("[Producer] Connection closed")

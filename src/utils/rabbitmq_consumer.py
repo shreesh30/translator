@@ -5,6 +5,7 @@ import time
 import pika
 from pika.exceptions import AMQPConnectionError
 
+from src.utils.heartbeat_thread import HeartbeatThread
 from src.utils.utils import Utils
 
 
@@ -23,6 +24,7 @@ class RabbitMQConsumer:
         self.prefetch_count = prefetch_count
         self.connection = None
         self.channel = None
+        self.heartbeat_thread = None
 
     def connect(self):
         """
@@ -31,12 +33,17 @@ class RabbitMQConsumer:
         while True:
             try:
                 credentials = pika.PlainCredentials(Utils.KEY_USER, Utils.KEY_PASSWORD)
-                params = pika.ConnectionParameters(host=self.host, credentials=credentials, heartbeat=30,blocked_connection_timeout=1200)
+                params = pika.ConnectionParameters(host=self.host, credentials=credentials, heartbeat=60,blocked_connection_timeout=1800)
                 self.connection = pika.BlockingConnection(params)
                 self.channel = self.connection.channel()
                 self.channel.queue_declare(queue=self.queue, durable=self.durable)
                 self.channel.basic_qos(prefetch_count=self.prefetch_count)
                 logging.info(f"[Consumer] Connected to RabbitMQ at {self.host}")
+
+                # Start heartbeat thread
+                if self.heartbeat_thread is None:
+                    self.heartbeat_thread = HeartbeatThread(self.connection)
+                    self.heartbeat_thread.start()
                 return
             except Exception as e:
                 logging.error(f"[Consumer] Connection failed: {e}. Retrying in 5s...")
@@ -74,6 +81,8 @@ class RabbitMQConsumer:
         """
         Closes the connection to RabbitMQ.
         """
-        if self.connection:
+        if self.heartbeat_thread:
+            self.heartbeat_thread.stop()
+        if self.connection and self.connection.is_open:
             self.connection.close()
             logging.info("[Consumer] Connection closed")
