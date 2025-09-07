@@ -1,9 +1,8 @@
 import json
 import logging
+import time
 
 import pika
-from pika.exceptions import ChannelClosed, AMQPConnectionError
-
 from src.utils.utils import Utils
 
 
@@ -25,20 +24,23 @@ class RabbitMQProducer:
         """
         Connects to RabbitMQ and declares the queue.
         """
-        try:
-            credentials = pika.PlainCredentials(Utils.KEY_USER, Utils.KEY_PASSWORD)
-            params = pika.ConnectionParameters(host=self.host, credentials=credentials, heartbeat=30, blocked_connection_timeout=1200)
-            self.connection = pika.BlockingConnection(params)
-            self.channel = self.connection.channel()
-            self.channel.queue_declare(queue=self.queue, durable=self.durable)
-            logging.info(f"[Producer] Connected to RabbitMQ at {self.host}, queue={self.queue}")
-        except Exception as e:
-            logging.error(f"[Producer] Connection failed: {e}")
-            raise
+        while True:
+            try:
+                credentials = pika.PlainCredentials(Utils.KEY_USER, Utils.KEY_PASSWORD)
+                params = pika.ConnectionParameters(host=self.host, credentials=credentials, heartbeat=1200, blocked_connection_timeout=1200)
+                self.connection = pika.BlockingConnection(params)
+                self.channel = self.connection.channel()
+                self.channel.queue_declare(queue=self.queue, durable=self.durable)
+                logging.info(f"[Producer] Connected to RabbitMQ at {self.host}, queue={self.queue}")
+                return
+            except Exception as e:
+                logging.error(f"[Producer] Connection failed: {e}")
+                time.sleep(5)
 
     def publish(self, message, persistent=True):
         if not self.channel or self.channel.is_closed:
-            raise RuntimeError("Producer channel is closed")
+            logging.info("Reconnecting producer...")
+            self.connect()
 
         if isinstance(message, dict):
             message = json.dumps(message)
