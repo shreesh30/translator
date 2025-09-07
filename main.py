@@ -7,19 +7,10 @@ from src.utils.utils import Utils
 log_dir = Utils.LOG_DIR
 if __name__ == "__main__":
     # Remove all the logs
-    if os.path.exists(log_dir):
-        # Remove all contents inside the folder
-        for filename in os.listdir(log_dir):
-            file_path = os.path.join(log_dir, filename)
-            try:
-                if os.path.isfile(file_path) or os.path.islink(file_path):
-                    os.unlink(file_path)  # remove file or symlink
-                elif os.path.isdir(file_path):
-                    shutil.rmtree(file_path)  # remove folder recursively
-            except Exception as e:
-                print(f"Failed to delete {file_path}: {e}")
-    else:
-        os.makedirs(log_dir)
+    Utils.clear_directory(Utils.LOG_DIR)
+
+    # Clear Output Folder
+    Utils.clear_directory(Utils.OUTPUT_DIR)
 
     parser = argparse.ArgumentParser(description="Setup services")
     parser.add_argument(

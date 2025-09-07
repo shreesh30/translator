@@ -14,7 +14,6 @@ from src.utils.utils import Utils
 logger = logging.getLogger('result_handler')
 class ResultHandler:
     def __init__(self):
-        self.output_path = 'resource/output'
         self.documents = {}
         self.lock = threading.Lock()  # protect shared dict
         self.executor = ThreadPoolExecutor(max_workers=4)
@@ -51,7 +50,7 @@ class ResultHandler:
             )
             builder.build_document(elements)
 
-            target_dir = os.path.join(self.output_path, language)
+            target_dir = os.path.join(Utils.OUTPUT_DIR, language)
             os.makedirs(target_dir, exist_ok=True)
 
             docx_filename = f"{Path(file_name).stem}.docx"

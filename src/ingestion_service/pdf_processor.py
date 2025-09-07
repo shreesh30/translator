@@ -15,12 +15,11 @@ logger = logging.getLogger(Utils.INGESTION_SERVICE)
 
 
 class PDFProcessor:
-    def __init__(self, lang_configs, input_path):
+    def __init__(self, lang_configs):
         self.lang_configs = lang_configs
-        self.input_path = input_path
 
     def process_all_pdfs(self):
-        pdf_files = [f for f in os.listdir(self.input_path) if f.endswith(".pdf")]
+        pdf_files = [f for f in os.listdir(Utils.INPUT_DIR) if f.endswith(".pdf")]
 
         with ThreadPoolExecutor(max_workers=4) as executor:  # adjust workers as needed
             futures = [
@@ -40,7 +39,7 @@ class PDFProcessor:
 
         try:
             producer.connect()
-            file_path = os.path.join(self.input_path, filename)
+            file_path = os.path.join(Utils.INPUT_DIR, filename)
             processor = DocumentProcessor(file_path)
             processor.process_document()
             elements = processor.get_elements()

@@ -1,5 +1,6 @@
 import logging
 import os
+import shutil
 import subprocess
 from logging.handlers import RotatingFileHandler
 from string import Template
@@ -36,6 +37,10 @@ class Utils:
 
     # DIRECTORY
     LOG_DIR = 'logs'
+    OUTPUT_DIR = 'resource/output'
+    INPUT_DIR = 'resource/tmp'
+
+    # INPUT_DIR = "resource/input/pdf-complete"
 
     @staticmethod
     def setup_logging(log_file_name: str, max_bytes=10 * 1024 * 1024, backup_count=5):
@@ -55,6 +60,22 @@ class Utils:
         logger.setLevel(logging.DEBUG)
         logger.handlers = []  # clear existing handlers
         logger.addHandler(handler)
+
+    @staticmethod
+    def clear_directory(directory_name):
+        if os.path.exists(directory_name):
+            # Remove all contents inside the folder
+            for filename in os.listdir(directory_name):
+                file_path = os.path.join(directory_name, filename)
+                try:
+                    if os.path.isfile(file_path) or os.path.islink(file_path):
+                        os.unlink(file_path)  # remove file or symlink
+                    elif os.path.isdir(file_path):
+                        shutil.rmtree(file_path)  # remove folder recursively
+                except Exception as e:
+                    print(f"Failed to delete {file_path}: {e}")
+        else:
+            os.makedirs(directory_name)
 
     @staticmethod
     def generate_service_file(service_name, description, user, working_directory, exec_start):

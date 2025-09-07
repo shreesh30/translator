@@ -6,21 +6,19 @@ from src.model.language_config import LanguageConfig
 from src.utils.utils import Utils
 
 
-def run_pdf_processor(lang_configs, input_path):
+def run_pdf_processor(lang_configs):
     logger = logging.getLogger(Utils.INGESTION_SERVICE)
 
     # Start processing PDFs
-    logger.info("Starting PDF processing with input path: %s", input_path)
+    logger.info("Starting PDF processing with input path: %s", Utils.INPUT_DIR)
     processor = PDFProcessor(
         lang_configs=lang_configs,
-        input_path=input_path,
     )
     processor.process_all_pdfs()
 
 if __name__ == "__main__":
     Utils.setup_logging(f"{Utils.INGESTION_SERVICE}.log")
     # input_pdf_path = "resource/input/pdf-complete"  # Replace with your file
-    input_pdf_path = "resource/tmp"               # Replace with your file
 
     language_configs = [
         # LanguageConfig(target_language="Odia", target_language_key="ory_Orya",
@@ -86,4 +84,4 @@ if __name__ == "__main__":
 
     ]
 
-    run_pdf_processor(language_configs, input_pdf_path)
+    run_pdf_processor(language_configs)
