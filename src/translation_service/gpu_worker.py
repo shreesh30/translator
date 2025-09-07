@@ -361,13 +361,13 @@ class GPUWorker(Process):
 
     def run(self):
         logger.info("[GPUWorker] Starting and loading model...")
+
         consumer = RabbitMQConsumer(host=Utils.KEY_RABBITMQ_HOST, queue=Utils.QUEUE_TASKS)
-        producer = RabbitMQProducer(host=Utils.KEY_RABBITMQ_HOST, queue=Utils.QUEUE_RESULTS)
-
         consumer.connect()
-        producer.connect()
 
-        self.producer = producer
+        self.producer = RabbitMQProducer(host=Utils.KEY_RABBITMQ_HOST, queue=Utils.QUEUE_RESULTS)
+        self.producer.connect()
+
 
         self._init_model()
 
@@ -375,4 +375,4 @@ class GPUWorker(Process):
             consumer.consume(callback=self.process_message)
         finally:
             consumer.close()
-            producer.close()
+            self.producer.close()

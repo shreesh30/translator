@@ -27,7 +27,7 @@ class RabbitMQProducer:
         """
         try:
             credentials = pika.PlainCredentials(Utils.KEY_USER, Utils.KEY_PASSWORD)
-            params = pika.ConnectionParameters(host=self.host, credentials=credentials)
+            params = pika.ConnectionParameters(host=self.host, credentials=credentials, heartbeat=30, blocked_connection_timeout=1200)
             self.connection = pika.BlockingConnection(params)
             self.channel = self.connection.channel()
             self.channel.queue_declare(queue=self.queue, durable=self.durable)
@@ -37,40 +37,23 @@ class RabbitMQProducer:
             raise
 
     def publish(self, message, persistent=True):
-        """
-        Publishes a message to the queue. Reconnects if channel is closed.
-        :param message: Can be a dict or string.
-        :param persistent: If True, message survives broker restarts.
-        """
+        if not self.channel or self.channel.is_closed:
+            raise RuntimeError("Producer channel is closed")
+
         if isinstance(message, dict):
             message = json.dumps(message)
 
         properties = pika.BasicProperties(
-            delivery_mode=2 if persistent else 1  # 2 = persistent, 1 = transient
+            delivery_mode=2 if persistent else 1
         )
 
-        for attempt in range(2):  # try twice: first attempt, then reconnect once if fails
-            try:
-                if not self.channel or self.channel.is_closed:
-                    logging.warning("[Producer] Channel closed or missing. Reconnecting...")
-                    self.connect()
-
-                self.channel.basic_publish(
-                    exchange='',
-                    routing_key=self.queue,
-                    body=message,
-                    properties=properties
-                )
-                logging.info(f"[Producer] Message published to {self.queue}")
-                break  # success, exit loop
-
-            except (ChannelClosed, AMQPConnectionError) as e:
-                logging.warning(f"[Producer] Publish failed: {e}")
-                if attempt == 0:
-                    logging.info("[Producer] Attempting to reconnect and retry...")
-                    self.connect()
-                else:
-                    raise  # second attempt failed, propagate exception
+        self.channel.basic_publish(
+            exchange='',
+            routing_key=self.queue,
+            body=message,
+            properties=properties
+        )
+        logging.info(f"[Producer] Message published to {self.queue}")
 
     def get_queue_info(self, queue):
         if not self.channel:
