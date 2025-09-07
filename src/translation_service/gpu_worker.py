@@ -329,11 +329,8 @@ class GPUWorker(Process):
         try:
             producer.connect()
             task = pickle.loads(body)
-            # data = json.loads(body.decode("utf-8"))  # if messages are JSON
             logging.info(f"[Consumer] Received: {task}")
 
-            # task = from_dict(Task, data)
-            # logger.info(f'Task Received: {task}')
             logger.info(f"[GPUWorker] Received task {task.id}, chunk {task.chunk_index + 1}/{task.total_chunks}")
 
             element = task.element
