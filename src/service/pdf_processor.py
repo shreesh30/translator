@@ -56,10 +56,10 @@ class PDFProcessor:
                 task_id = uuid.uuid4().hex
                 for idx, element in enumerate(elements):
                     task = Task(id=task_id, element = element, language_config=language_config, filename=filename, chunk_index=idx, total_chunks=total_chunks, meta_data=metadata)
-                    body = pickle.dumps(task)
+                    task_body = pickle.dumps(task)
                     # task_json = json.dumps(asdict(task), cls=CustomJSONEncoder) # type: ignore[arg-type]
                     logger.info(f'Publishing Task Json: {task}')
-                    producer.publish(body)
+                    producer.publish(task_body)
                     logger.info(f"Queued chunk {idx+1}/{total_chunks} for {filename} in {language_config.get_target_language()} (task_id={task_id})")
         except Exception as e:
             logger.error(f"Error processing {filename}: {e}")
