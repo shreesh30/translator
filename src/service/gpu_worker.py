@@ -358,8 +358,9 @@ class GPUWorker(Process):
                     meta_data= task.meta_data
                 )
 
-            result_json = json.dumps(asdict(result), cls=CustomJSONEncoder) # type: ignore[arg-type]
-            producer.publish(result_json)
+            result_body = pickle.dumps(result)
+            # result_json = json.dumps(asdict(result), cls=CustomJSONEncoder) # type: ignore[arg-type]
+            producer.publish(result_body)
 
             # Acknowledge after processing
             ch.basic_ack(delivery_tag=method.delivery_tag)
