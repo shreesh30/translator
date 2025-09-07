@@ -16,7 +16,7 @@ class ResultHandler:
     def __init__(self):
         self.documents = {}
         self.lock = threading.Lock()  # protect shared dict
-        self.executor = ThreadPoolExecutor(max_workers=4)
+        self.executor = ThreadPoolExecutor(max_workers=2)
 
     def handle_complete_document(self, doc_id):
         """Called in a worker thread when all chunks for a doc are collected."""
