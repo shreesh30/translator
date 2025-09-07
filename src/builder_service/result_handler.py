@@ -18,16 +18,16 @@ class ResultHandler:
         self.lock = threading.Lock()  # protect shared dict
         self.executor = ThreadPoolExecutor(max_workers=2)
 
-    def handle_complete_document(self, doc_id):
+    @staticmethod
+    def handle_complete_document(results):
         """Called in a worker thread when all chunks for a doc are collected."""
-        with self.lock:
-            results = self.documents.pop(doc_id, [])
-
         if not results:
             return
 
         # Sort chunks by index
         results.sort(key=lambda r: r.chunk_index)
+
+        doc_id = results[-1].id
 
         logger.info(
             f"[GPUWorker] Finalizing document {doc_id} with {len(results)} chunks "
@@ -73,15 +73,17 @@ class ResultHandler:
                 else:
                     self.documents[result.id].append(result)
 
+                logging.info(f"Updated Documents: {self.documents}")
+
+                ch.basic_ack(delivery_tag=method.delivery_tag)
+                logging.info("[Consumer] Message acknowledged")
+
                 # Check if document is complete
                 if len(self.documents[result.id]) == result.total_chunks:
                     logger.info(f"[GPUWorker] All chunks received for {result.id}")
+                    results = self.documents.pop(result.id)
                     # Submit processing to thread pool
-                    self.executor.submit(self.handle_complete_document, result.id)
-
-            # Acknowledge after processing
-            ch.basic_ack(delivery_tag=method.delivery_tag)
-            logging.info("[Consumer] Message acknowledged")
+                    self.executor.submit(self.handle_complete_document, results)
         except Exception as e:
             logger.error(f"[GPUWorker] Error: {e}")
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
