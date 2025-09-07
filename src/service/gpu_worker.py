@@ -1,5 +1,6 @@
 import json
 import logging
+import pickle
 import re
 from dataclasses import asdict
 from multiprocessing import Process
@@ -59,7 +60,9 @@ class GPUWorker(Process):
     def _split_words(self ,text, font, max_width_pt, paragraph, task):
         """Splits space-separated languages using accurate width measurements."""
         meta_data = task.meta_data
-        paragraph_start = meta_data.paragraph_start
+        document_processor = meta_data.document_processor
+        paragraph_start = document_processor.get_paragraph_start()
+
 
         words = text.split()
         lines = []
@@ -330,11 +333,12 @@ class GPUWorker(Process):
 
         try:
             producer.connect()
-            data = json.loads(body.decode("utf-8"))  # if messages are JSON
-            logging.info(f"[Consumer] Received: {data}")
+            task = pickle.loads(body)
+            # data = json.loads(body.decode("utf-8"))  # if messages are JSON
+            logging.info(f"[Consumer] Received: {task}")
 
-            task = from_dict(Task, data)
-            logger.info(f'Task Received: {task}')
+            # task = from_dict(Task, data)
+            # logger.info(f'Task Received: {task}')
             logger.info(f"[GPUWorker] Received task {task.id}, chunk {task.chunk_index + 1}/{task.total_chunks}")
 
             element = task.element
