@@ -14,6 +14,7 @@ from src.model.line import Line
 from src.model.paragraph import Paragraph
 from src.model.result import Result
 from src.model.table import Table
+from src.model.task import Task
 from src.utils.rabbitmq_consumer import RabbitMQConsumer
 from src.utils.rabbitmq_producer import RabbitMQProducer
 from src.utils.utils import Utils
@@ -326,6 +327,10 @@ class GPUWorker:
         if self.producer is not None:
             try:
                 task = pickle.loads(body)
+
+                if not isinstance(task, Task):
+                    raise TypeError(f"Expected Task, got {type(task)}")
+
                 logger.info(f"Received task {task.id}, chunk {task.chunk_index + 1}/{task.total_chunks}")
 
                 element = task.element
@@ -346,6 +351,8 @@ class GPUWorker:
                     )
 
                 result_body = pickle.dumps(result)
+
+                logger.info(f'Publishing Result: {result}')
                 self.producer.publish(result_body, persistent=False)
 
                 # Acknowledge after processing

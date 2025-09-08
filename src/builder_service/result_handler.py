@@ -7,6 +7,7 @@ from pathlib import Path
 
 from docx import Document
 
+from src.model.result import Result
 from src.utils.document_builder import DocumentBuilder
 from src.utils.rabbitmq_consumer import RabbitMQConsumer
 from src.utils.utils import Utils
@@ -17,7 +18,7 @@ class ResultHandler:
     def __init__(self):
         self.documents = {}
         self.lock = threading.Lock()  # protect shared dict
-        self.executor = ThreadPoolExecutor(max_workers=2)
+        self.executor = ThreadPoolExecutor(max_workers=1)
 
     @staticmethod
     def handle_complete_document(results):
@@ -65,6 +66,10 @@ class ResultHandler:
     def process_message(self,ch, method, properties, body):
         try:
             result = pickle.loads(body)
+
+            if not isinstance(result, Result):
+                raise TypeError(f"Expected Result, got {type(result)}")
+
             logger.info(f"[Consumer] Received result {result.id}, chunk {result.chunk_index + 1}/{result.total_chunks}")
 
             with self.lock:
