@@ -348,7 +348,7 @@ class GPUWorker(Process):
                     )
 
                 result_body = pickle.dumps(result)
-                self.producer.publish(result_body)
+                self.producer.publish(result_body, persistent=False)
 
                 # Acknowledge after processing
                 ch.basic_ack(delivery_tag=method.delivery_tag)
