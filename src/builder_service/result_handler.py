@@ -11,7 +11,7 @@ from src.utils.document_builder import DocumentBuilder
 from src.utils.rabbitmq_consumer import RabbitMQConsumer
 from src.utils.utils import Utils
 
-logger = logging.getLogger('result_handler')
+logger = logging.getLogger(Utils.BUILDER_SERVICE)
 class ResultHandler:
     def __init__(self):
         self.documents = {}
@@ -30,7 +30,7 @@ class ResultHandler:
         doc_id = results[-1].id
 
         logger.info(
-            f"[GPUWorker] Finalizing document {doc_id} with {len(results)} chunks "
+            f"[ResultHandler] Finalizing document {doc_id} with {len(results)} chunks "
             f"(thread: {threading.current_thread().name})"
         )
         try:
@@ -59,7 +59,7 @@ class ResultHandler:
             doc.save(str(save_path))
             logger.info(f"Saved {language} version of {file_name}")
         except Exception as e:
-            logger.error(f"[GPUWorker] Error writing document {doc_id}: {e}", exc_info=True)
+            logger.error(f"[ResultHandler] Error writing document {doc_id}: {e}", exc_info=True)
 
     def process_message(self,ch, method, properties, body):
         try:
@@ -79,12 +79,12 @@ class ResultHandler:
 
                 # Check if document is complete
                 if len(self.documents[result.id]) == result.total_chunks:
-                    logger.info(f"[GPUWorker] All chunks received for {result.id}")
+                    logger.info(f"[ResultHandler] All chunks received for {result.id}")
                     results = self.documents.pop(result.id)
                     # Submit processing to thread pool
                     self.executor.submit(self.handle_complete_document, results)
         except Exception as e:
-            logger.error(f"[GPUWorker] Error: {e}")
+            logger.error(f"[ResultHandler] Error: {e}")
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
 
     def run(self):

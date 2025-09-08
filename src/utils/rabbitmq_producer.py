@@ -1,4 +1,3 @@
-import json
 import logging
 import time
 
@@ -50,9 +49,6 @@ class RabbitMQProducer:
         if not self.channel or self.channel.is_closed:
             logging.info("Reconnecting producer...")
             self.connect()
-
-        if isinstance(message, dict):
-            message = json.dumps(message)
 
         properties = pika.BasicProperties(
             delivery_mode=2 if persistent else 1
