@@ -1,9 +1,10 @@
+import json
 import logging
 import os
-import pickle
 import uuid
 from concurrent.futures import as_completed
 from concurrent.futures.thread import ThreadPoolExecutor
+from dataclasses import asdict
 
 from src.model.document_metadata import DocumentMetadata
 from src.model.task import Task
@@ -51,9 +52,11 @@ class PDFProcessor:
                 task_id = uuid.uuid4().hex
                 for idx, element in enumerate(elements):
                     task = Task(id=task_id, element = element, language_config=language_config, filename=filename, chunk_index=idx, total_chunks=total_chunks, meta_data=metadata)
-                    task_body = pickle.dumps(task)
-                    logger.info(f'Publishing Task: {task}')
-                    producer.publish(task_body, persistent=False)
+                    task_json = json.dumps(asdict(task)) # type: ignore[arg-type]
+                    # task_body = pickle.dumps(task)
+                    logger.info(f'Publishing Task: {task_json}')
+                    # producer.publish(task_body, persistent=False)
+                    producer.publish(task_json.encode("utf-8"), persistent=False)
                     logger.info(f"Queued chunk {idx+1}/{total_chunks} for {filename} in {language_config.get_target_language()} (task_id={task_id})")
         except Exception as e:
             logger.error(f"Error processing {filename}: {e}", exc_info=True)

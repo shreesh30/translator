@@ -1,11 +1,14 @@
+import json
 import logging
 import pickle
 import re
+from dataclasses import asdict
 
 import fitz
 import torch
 from IndicTransToolkit.processor import IndicProcessor
 from PIL import ImageFont
+from dacite import from_dict
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, BitsAndBytesConfig
 
 from src.model.bbox import Bbox
@@ -326,7 +329,13 @@ class GPUWorker:
     def process_message(self,ch, method, properties, body):
         if self.producer is not None:
             try:
-                task = pickle.loads(body)
+                body_str = body.decode("utf-8")  # RabbitMQ message body → str
+                task_dict = json.loads(body_str)
+
+                # Dict → Result dataclass (with nested dataclasses)
+                task = from_dict(Task, task_dict)
+
+                # task = pickle.loads(body)
 
                 if not isinstance(task, Task):
                     raise TypeError(f"Expected Task, got {type(task)}")
@@ -350,10 +359,11 @@ class GPUWorker:
                         meta_data= task.meta_data
                     )
 
-                result_body = pickle.dumps(result)
+                result_json = json.dumps(asdict(result)) # type: ignore[arg-type]
+                # result_body = pickle.dumps(result)
 
                 logger.info(f'Publishing Result: {result}')
-                self.producer.publish(result_body, persistent=False)
+                self.producer.publish(result_json.encode("utf-8"), persistent=False)
 
                 # Acknowledge after processing
                 ch.basic_ack(delivery_tag=method.delivery_tag)

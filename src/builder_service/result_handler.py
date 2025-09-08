@@ -1,11 +1,14 @@
+import json
 import logging
 import os
 import pickle
 import shutil
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import asdict
 from pathlib import Path
 
+from dacite import from_dict
 from docx import Document
 
 from src.model.result import Result
@@ -34,9 +37,11 @@ class ResultHandler:
                 continue
             doc_id = doc_dir.name
             chunks = []
-            for chunk_file in sorted(doc_dir.glob("chunk_*.pkl")):
-                with open(chunk_file, "rb") as f:
-                    chunks.append(pickle.load(f))
+            for chunk_file in sorted(doc_dir.glob("chunk_*.json")):
+                with open(chunk_file, "r", encoding="utf-8") as f:
+                    result_dict = json.load(f)
+                    result = from_dict(Result, result_dict)
+                    chunks.append(result)
             if chunks:
                 self.documents[doc_id] = chunks
                 logger.info(f"[ResultHandler] Rebuilt {len(chunks)} chunks for doc {doc_id}")
@@ -44,13 +49,13 @@ class ResultHandler:
     def _chunk_path(self, doc_id, chunk_index):
         doc_dir = self.cache_dir / str(doc_id)
         doc_dir.mkdir(parents=True, exist_ok=True)
-        return doc_dir / f"chunk_{chunk_index}.pkl"
+        return doc_dir / f"chunk_{chunk_index}.json"
 
-    def _persist_chunk(self, result):
+    def _persist_chunk(self, result: Result):
         """Persist each chunk to disk so it's restart-safe"""
         path = self._chunk_path(result.id, result.chunk_index)
-        with open(path, "wb") as f:
-            pickle.dump(result, f) # type: ignore[arg-type]
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(asdict(result), f, ensure_ascii=False) # type: ignore[arg-type]
 
     def handle_complete_document(self, results):
         """Called in a worker thread when all chunks for a doc are collected."""
@@ -103,7 +108,12 @@ class ResultHandler:
 
     def process_message(self,ch, method, properties, body):
         try:
-            result = pickle.loads(body)
+            # result = pickle.loads(body)
+            body_str = body.decode("utf-8")  # RabbitMQ message body → str
+            result_dict = json.loads(body_str)
+
+            # Dict → Result dataclass (with nested dataclasses)
+            result = from_dict(Result, result_dict)
 
             if not isinstance(result, Result):
                 raise TypeError(f"Expected Result, got {type(result)}")
