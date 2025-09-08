@@ -8,6 +8,7 @@ from IndicTransToolkit.processor import IndicProcessor
 from PIL import ImageFont
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, BitsAndBytesConfig
 
+from src.model.bbox import Bbox
 from src.model.footer import Footer
 from src.model.language_config import LanguageConfig
 from src.model.line import Line
@@ -130,7 +131,8 @@ class GPUWorker:
         # Load font
         font = ImageFont.truetype(language_config.get_target_font_path(), size=font_size_pt)
         bbox = font.getbbox(line_copy)
-        return fitz.Rect(bbox)
+        fitz_bbox = fitz.Rect(bbox)
+        return Bbox(x0=fitz_bbox.x0,x1=fitz_bbox.x1,y0=fitz_bbox.y0,y1=fitz_bbox.y1)
 
     def translate_paragraph(self,paragraph : Paragraph, task):
         try:

@@ -5,20 +5,27 @@ from src.utils.utils import Utils
 
 log_dir = Utils.LOG_DIR
 if __name__ == "__main__":
-    # Remove all the logs
-    Utils.clear_directory(Utils.LOG_DIR)
-
-    # Clear Output Folder
-    Utils.clear_directory(Utils.OUTPUT_DIR)
-
     parser = argparse.ArgumentParser(description="Setup services")
     parser.add_argument(
         "service",
         nargs="?",  # makes the argument optional
-        choices=[Utils.TRANSLATION_SERVICE],
+        choices=[Utils.TRANSLATION_SERVICE, Utils.INGESTION_SERVICE, Utils.BUILDER_SERVICE],
         help="Service to install (only used for translation_service)"
     )
+
+    parser.add_argument(
+        "--clear-all",
+        action="store_true",
+        help="Remove all logs and output folders before starting services"
+    )
+
     args = parser.parse_args()
+
+    # --- Clear directories if requested ---
+    if args.clear_all:
+        print("Clearing logs and output directories...")
+        Utils.clear_directory(Utils.LOG_DIR)
+        Utils.clear_directory(Utils.OUTPUT_DIR)
 
     all_services = [
         {
@@ -41,7 +48,6 @@ if __name__ == "__main__":
     if args.service is None:
         services = [svc for svc in all_services if svc["name"] != Utils.TRANSLATION_SERVICE]
     else:
-        # Only translation_service if passed
         services = [svc for svc in all_services if svc["name"] == args.service]
 
     working_dir = os.path.dirname(__file__)

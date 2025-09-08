@@ -2,6 +2,8 @@ from dataclasses import dataclass, field
 
 import fitz
 
+from src.model.bbox import Bbox
+
 
 @dataclass
 class Span:
@@ -10,7 +12,7 @@ class Span:
     font_size: float = field(default_factory=float, repr=False)
     page_num: int = field(default_factory=float, repr=False)
     origin: tuple = field(default_factory=tuple, repr=True)
-    bbox: fitz.Rect = field(default_factory=lambda: fitz.Rect(0, 0, 0, 0), repr=True)
+    bbox: Bbox = field(default_factory=lambda: Bbox(0, 0, 0, 0), repr=True)
 
     def set_text(self, text):
         self.text = text

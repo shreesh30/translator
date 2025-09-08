@@ -2,11 +2,13 @@ from dataclasses import field, dataclass
 
 import fitz
 
+from src.model.bbox import Bbox
+
 
 @dataclass
 class Drawing:
     page_number: int = field(default_factory=int)
-    bbox:fitz.Rect = field(default_factory=lambda: fitz.Rect(0, 0, 0, 0))
+    bbox:Bbox = field(default_factory=lambda: Bbox(0, 0, 0, 0))
 
     def set_page_number(self, page_number):
         self.page_number = page_number

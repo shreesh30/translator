@@ -1,6 +1,7 @@
 import logging
 import os
 import pickle
+import shutil
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -18,10 +19,40 @@ class ResultHandler:
     def __init__(self):
         self.documents = {}
         self.lock = threading.Lock()  # protect shared dict
-        self.executor = ThreadPoolExecutor(max_workers=1)
+        self.executor = ThreadPoolExecutor(max_workers=2)
 
-    @staticmethod
-    def handle_complete_document(results):
+        self.cache_dir = Path(Utils.CACHE_DIR)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+
+        # On startup, rebuild from disk
+        self._rebuild_from_disk()
+
+    def _rebuild_from_disk(self):
+        """On startup, reload incomplete docs from disk"""
+        for doc_dir in self.cache_dir.iterdir():
+            if not doc_dir.is_dir():
+                continue
+            doc_id = doc_dir.name
+            chunks = []
+            for chunk_file in sorted(doc_dir.glob("chunk_*.pkl")):
+                with open(chunk_file, "rb") as f:
+                    chunks.append(pickle.load(f))
+            if chunks:
+                self.documents[doc_id] = chunks
+                logger.info(f"[ResultHandler] Rebuilt {len(chunks)} chunks for doc {doc_id}")
+
+    def _chunk_path(self, doc_id, chunk_index):
+        doc_dir = self.cache_dir / str(doc_id)
+        doc_dir.mkdir(parents=True, exist_ok=True)
+        return doc_dir / f"chunk_{chunk_index}.pkl"
+
+    def _persist_chunk(self, result):
+        """Persist each chunk to disk so it's restart-safe"""
+        path = self._chunk_path(result.id, result.chunk_index)
+        with open(path, "wb") as f:
+            pickle.dump(result, f) # type: ignore[arg-type]
+
+    def handle_complete_document(self, results):
         """Called in a worker thread when all chunks for a doc are collected."""
         if not results:
             return
@@ -60,6 +91,14 @@ class ResultHandler:
 
             doc.save(str(save_path))
             logger.info(f"Saved {language} version of {file_name}")
+
+            # If done successfully, cleanup from disk
+
+            doc_dir = self.cache_dir / str(results[-1].id)
+            if doc_dir.exists():
+                shutil.rmtree(doc_dir, ignore_errors=True)
+
+            logger.info(f"[ResultHandler] Cleaned up temporary files for document {doc_id}")
         except Exception as e:
             logger.error(f"[ResultHandler] Error writing document {doc_id}: {e}", exc_info=True)
 
@@ -71,6 +110,9 @@ class ResultHandler:
                 raise TypeError(f"Expected Result, got {type(result)}")
 
             logger.info(f"[Consumer] Received result {result.id}, chunk {result.chunk_index + 1}/{result.total_chunks}")
+
+            # Persist chunk
+            self._persist_chunk(result)
 
             with self.lock:
                 if result.id not in self.documents:

@@ -40,6 +40,7 @@ class Utils:
     OUTPUT_DIR = 'resource/output'
     # INPUT_DIR = 'resource/tmp'
     INPUT_DIR = "resource/input/pdf-complete"
+    CACHE_DIR = '/var/cache/translator'
 
     @staticmethod
     def setup_logging(log_file_name: str, max_bytes=10 * 1024 * 1024, backup_count=5):
