@@ -358,7 +358,6 @@ class DocumentProcessor:
         new_span.set_font(font)
         new_span.set_font_size(span["size"])
         new_span.set_page_num(page_num)
-        new_span.set_origin(span["origin"])
 
         fitz_bbox = fitz.Rect(span["bbox"])
         bbox = Bbox(x0=fitz_bbox.x0,x1= fitz_bbox.x1, y0=fitz_bbox.y0,y1= fitz_bbox.y1)

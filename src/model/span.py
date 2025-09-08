@@ -11,7 +11,6 @@ class Span:
     font: str = field(default_factory=str, repr = False)
     font_size: float = field(default_factory=float, repr=False)
     page_num: int = field(default_factory=float, repr=False)
-    origin: tuple = field(default_factory=tuple, repr=True)
     bbox: Bbox = field(default_factory=lambda: Bbox(0, 0, 0, 0), repr=True)
 
     def set_text(self, text):
@@ -37,12 +36,6 @@ class Span:
 
     def set_page_num(self, page_num):
         self.page_num= page_num
-
-    def get_origin(self):
-        return self.origin
-
-    def set_origin(self, origin):
-        self.origin = origin
 
     def get_bbox(self):
         return self.bbox

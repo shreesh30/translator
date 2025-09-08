@@ -11,7 +11,6 @@ class Line:
     page_number: int = field(default_factory=int, repr=False)
     text: str = ""
     line_bbox: Bbox = field(default_factory=lambda: Bbox(0, 0, 0, 0))
-    origin: Tuple[float, float]  = field(default_factory=tuple)
     font_size: float = field(default_factory=int, repr=True)
 
     def set_text(self, text):
@@ -19,9 +18,6 @@ class Line:
 
     def set_line_bbox(self, bbox):
         self.line_bbox = bbox
-
-    def set_origin(self, origin):
-        self.origin =  origin
 
     def set_font_size(self, font_size):
         self.font_size = font_size
@@ -31,9 +27,6 @@ class Line:
 
     def get_line_bbox(self):
         return self.line_bbox
-
-    def get_origin(self):
-        return self.origin
 
     def get_page_number(self):
         return self.page_number
