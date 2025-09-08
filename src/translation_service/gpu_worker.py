@@ -328,8 +328,6 @@ class GPUWorker(Process):
         if self.producer is not None:
             try:
                 task = pickle.loads(body)
-                logging.info(f"[Consumer] Received: {task}")
-
                 logger.info(f"[GPUWorker] Received task {task.id}, chunk {task.chunk_index + 1}/{task.total_chunks}")
 
                 element = task.element

@@ -64,8 +64,7 @@ class ResultHandler:
     def process_message(self,ch, method, properties, body):
         try:
             result = pickle.loads(body)
-            logging.info(f"[Consumer] Received: {result}")
-            logger.info(f"[GPUWorker] Received result {result.id}, chunk {result.chunk_index + 1}/{result.total_chunks}")
+            logger.info(f"[Consumer] Received result {result.id}, chunk {result.chunk_index + 1}/{result.total_chunks}")
 
             with self.lock:
                 if result.id not in self.documents:
