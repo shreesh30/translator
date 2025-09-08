@@ -3,8 +3,6 @@ from dataclasses import dataclass, field
 from typing import List
 import logging
 
-import fitz
-
 from src.model.bbox import Bbox
 from src.model.drawing import Drawing
 from src.model.element import Element
@@ -195,11 +193,11 @@ class Page:
 
                 current_bbox = line.get_line_bbox()
 
-                updated_bbox = fitz.Rect(
-                    current_line.get_line_bbox().x0,
-                    current_line.get_line_bbox().y0,
-                    current_bbox.x1,
-                    current_bbox.y1
+                updated_bbox = Bbox(
+                    x0=current_line.get_line_bbox().x0,
+                    y0=current_line.get_line_bbox().y0,
+                    x1=current_bbox.x1,
+                    y1=current_bbox.y1
                 )
                 current_line.set_line_bbox(updated_bbox)
                 current_line.set_font_size(max(current_line.font_size, line.get_font_size()))
@@ -491,9 +489,9 @@ class Page:
         y0 = lines[0].get_line_bbox().y0
         x1 = lines[-1].get_line_bbox().x1
         y1 = lines[-1].get_line_bbox().y1
-        line_bbox = fitz.Rect(x0, y0, x1, y1)
+        bbox = Bbox(x0=x0,y0=y0,x1=x1,y1=y1)
 
-        line = Line(text=line_text, font_size=font_size, line_bbox=line_bbox)
+        line = Line(text=line_text, font_size=font_size, line_bbox=bbox)
 
         return line
 

@@ -69,7 +69,6 @@ class ResultHandler:
         try:
             language_config= results[-1].language_config
             meta_data = results[-1].meta_data
-            document_processor = meta_data.document_processor
             elements = [result.element for result in results]
             file_name = results[-1].filename
             language = language_config.target_language
@@ -79,7 +78,7 @@ class ResultHandler:
             builder = DocumentBuilder(
                 document=doc,
                 language_config=language_config,
-                document_processor=document_processor
+                meta_data=meta_data
             )
             builder.build_document(elements)
 

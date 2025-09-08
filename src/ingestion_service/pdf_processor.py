@@ -44,7 +44,8 @@ class PDFProcessor:
             processor.process_document()
             elements = processor.get_elements()
             total_chunks = len(elements)
-            metadata= DocumentMetadata(document_processor=processor)
+
+            metadata= DocumentMetadata(paragraph_start=processor.get_paragraph_start(),pages=processor.get_pages())
 
             for language_config in self.lang_configs:
                 task_id = uuid.uuid4().hex

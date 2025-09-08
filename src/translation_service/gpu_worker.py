@@ -56,9 +56,7 @@ class GPUWorker:
     def _split_words(self ,text, font, max_width_pt, paragraph, task):
         """Splits space-separated languages using accurate width measurements."""
         meta_data = task.meta_data
-        document_processor = meta_data.document_processor
-        paragraph_start = document_processor.get_paragraph_start()
-
+        paragraph_start = meta_data.get_paragraph_start()
 
         words = text.split()
         lines = []

@@ -1,14 +1,28 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import List
 
-from src.utils.document_processor import DocumentProcessor
+from src.model.page import Page
 
 
 @dataclass
 class DocumentMetadata:
-    document_processor: DocumentProcessor
+    paragraph_start: int =  field(default_factory=int, repr=False)
+    pages: List[Page] = field(default_factory=list)
 
-    def set_document_processor(self, document_processor):
-        self.document_processor = document_processor
+    def get_pages(self):
+        return self.pages
 
-    def get_document_processor(self):
-        return self.document_processor
+    def get_paragraph_start(self):
+        return self.paragraph_start
+
+    def get_page_number_info(self):
+        extracted_page_number = None
+        page_number_start = None
+
+        for page in self.pages:
+            if page.get_extracted_page_number() and extracted_page_number is None:
+                extracted_page_number = int(page.get_extracted_page_number())
+                page_number_start = page.get_page_number()
+                break
+
+        return extracted_page_number, page_number_start
