@@ -6,7 +6,7 @@ from src.model.page import Page
 
 @dataclass
 class DocumentMetadata:
-    paragraph_start: int =  field(default_factory=int, repr=False)
+    paragraph_start: float =  field(default_factory=float, repr=False)
     pages: List[Page] = field(default_factory=list)
 
     def get_pages(self):
