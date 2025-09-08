@@ -1,7 +1,6 @@
 import logging
 import pickle
 import re
-from multiprocessing import Process
 
 import fitz
 import torch
@@ -21,8 +20,7 @@ from src.utils.utils import Utils
 
 logger = logging.getLogger(Utils.TRANSLATION_SERVICE)
 
-
-class GPUWorker(Process):
+class GPUWorker:
     def __init__(self, model_name: str, quantization: str):
         super().__init__()
         self.model_name = model_name
@@ -184,7 +182,7 @@ class GPUWorker(Process):
                 translated_text = self.translate_text(paragraph.get_volume(), target_language_key, source_language_key)
                 paragraph.set_volume(translated_text)
         except Exception as e:
-            logger.error(f'Error translating paragraph: {paragraph}: {e}')
+            logger.error(f'Error translating paragraph: {paragraph}: {e}', exc_info=True)
 
         return paragraph
 
@@ -220,7 +218,7 @@ class GPUWorker(Process):
                         logger.info(f'Translated Text: {translated_text}')
                         row.set_text(translated_text)
         except Exception as e:
-            logger.error(f'Error translating table:{table}: {e}')
+            logger.error(f'Error translating table:{table}: {e}', exc_info=True)
 
         return table
 
@@ -271,7 +269,7 @@ class GPUWorker(Process):
             return final[0]
 
         except Exception as e:
-            logger.error(f"Translation failed: {e}")
+            logger.error(f"Translation failed: {e}", exc_info=True)
             return ""
 
     def _init_model(self):
@@ -328,7 +326,7 @@ class GPUWorker(Process):
         if self.producer is not None:
             try:
                 task = pickle.loads(body)
-                logger.info(f"[GPUWorker] Received task {task.id}, chunk {task.chunk_index + 1}/{task.total_chunks}")
+                logger.info(f"Received task {task.id}, chunk {task.chunk_index + 1}/{task.total_chunks}")
 
                 element = task.element
 
@@ -352,9 +350,9 @@ class GPUWorker(Process):
 
                 # Acknowledge after processing
                 ch.basic_ack(delivery_tag=method.delivery_tag)
-                logging.info("[Consumer] Message acknowledged")
+                logger.info("Message acknowledged")
             except Exception as e:
-                logger.error(f"[GPUWorker] Error: {e}")
+                logger.error(f"Error: {e}", exc_info=True)
                 ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
 
     def run(self):

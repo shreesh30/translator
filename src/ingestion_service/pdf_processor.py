@@ -32,7 +32,7 @@ class PDFProcessor:
                 try:
                     future.result()  # raise if exception occurred
                 except Exception as e:
-                    logger.error(f"Error processing a file: {e}")
+                    logger.error(f"Error processing a file: {e}", exc_info=True)
 
     def process_single_pdf(self, filename):
         producer = RabbitMQProducer(host=Utils.KEY_RABBITMQ_LOCALHOST, queue=Utils.QUEUE_TASKS)
@@ -55,6 +55,6 @@ class PDFProcessor:
                     producer.publish(task_body, persistent=False)
                     logger.info(f"Queued chunk {idx+1}/{total_chunks} for {filename} in {language_config.get_target_language()} (task_id={task_id})")
         except Exception as e:
-            logger.error(f"Error processing {filename}: {e}")
+            logger.error(f"Error processing {filename}: {e}", exc_info=True)
         finally:
             producer.close()

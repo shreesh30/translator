@@ -12,6 +12,7 @@ from src.utils.rabbitmq_consumer import RabbitMQConsumer
 from src.utils.utils import Utils
 
 logger = logging.getLogger(Utils.BUILDER_SERVICE)
+
 class ResultHandler:
     def __init__(self):
         self.documents = {}
@@ -72,8 +73,6 @@ class ResultHandler:
                 else:
                     self.documents[result.id].append(result)
 
-                logging.info(f"Updated Documents: {self.documents}")
-
                 ch.basic_ack(delivery_tag=method.delivery_tag)
                 logging.info("[Consumer] Message acknowledged")
 
@@ -84,7 +83,7 @@ class ResultHandler:
                     # Submit processing to thread pool
                     self.executor.submit(self.handle_complete_document, results)
         except Exception as e:
-            logger.error(f"[ResultHandler] Error: {e}")
+            logger.error(f"[ResultHandler] Error: {e}", exc_info=True)
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
 
     def run(self):
