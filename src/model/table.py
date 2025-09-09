@@ -8,7 +8,7 @@ from src.utils.utils import Utils
 
 
 @dataclass
-class Table(Element):
+class Table:
     title: Line = field(default_factory=Line)
     sub_title: Line = field(default_factory=Line)
     rows: List[Line] = field(default_factory=list)
@@ -17,6 +17,8 @@ class Table(Element):
     volume: str = field(default_factory=str)
     content_table: bool = field(default_factory=bool)
     page_number: Footer = field(default_factory=Footer)
+    type: str = field(default_factory=str)
+    font_size: float = field(default_factory=float)
 
     def __post_init__(self):
         self.type = Utils.TYPE_TABLE
@@ -65,3 +67,9 @@ class Table(Element):
 
     def is_content_table(self):
         return self.content_table
+
+    def set_font_size(self, font_size):
+        self.font_size=font_size
+
+    def get_font_size(self):
+        return self.font_size

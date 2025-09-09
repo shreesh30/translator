@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class Page:
     number: int = field(default_factory=int)
     lines: List[Line] = field(default_factory=list, repr = False)
-    elements: List[Element] = field(default_factory=list)
+    elements: List[object] = field(default_factory=list)
     paragraphs: List[Paragraph] = field(default_factory=list, repr=False)
     tables: List[Table]  = field(default_factory=list, repr=False)
     headers: List[Header] = field(default_factory=list)

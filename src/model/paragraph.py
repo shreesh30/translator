@@ -13,7 +13,7 @@ from src.utils.utils import Utils
 
 
 @dataclass
-class Paragraph(Element):
+class Paragraph:
     page_number:int = field(default_factory=int)
     lines: List[Line] = field(default_factory=list)
     footer: List[Footer] = field(default_factory=list)
@@ -24,6 +24,7 @@ class Paragraph(Element):
     sub_paragraphs: List[Paragraph] = field(default_factory=list)
     chapter: str = field(default_factory=str)
     volume: str = field(default_factory=str)
+    type: str = field(default_factory=str)
 
     def __post_init__(self):
         self.type = Utils.TYPE_PARAGRAPH

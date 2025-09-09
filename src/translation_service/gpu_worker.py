@@ -346,8 +346,10 @@ class GPUWorker:
                 element = task.element
 
                 if isinstance(element, Paragraph):
+                    logger.info('Element instance of Paragraph')
                     self.translate_paragraph(element, task)
                 elif isinstance(element, Table):
+                    logger.info('Element instance of Table')
                     self.translate_table(element, task.language_config)
 
                 result = Result(
