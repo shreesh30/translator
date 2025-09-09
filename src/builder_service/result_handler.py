@@ -133,16 +133,33 @@ class ResultHandler:
                     logger.info(f"[ResultHandler] All chunks received for {result.id}")
                     results = self.documents.pop(result.id)
                     # Submit processing to thread pool
-                    self.executor.submit(self.handle_complete_document, results)
+                    # self.executor.submit(self.handle_complete_document, results)
+                    self.handle_complete_document(results)
         except Exception as e:
             logger.error(f"[ResultHandler] Error: {e}", exc_info=True)
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
 
-    def run(self):
-        consumer = RabbitMQConsumer(host=Utils.KEY_RABBITMQ_LOCALHOST, queue=Utils.QUEUE_RESULTS)
-
+    def _worker(self, worker_id):
+        consumer = RabbitMQConsumer(
+            host=Utils.KEY_RABBITMQ_LOCALHOST,
+            queue=Utils.QUEUE_RESULTS
+        )
         try:
             consumer.connect()
+            logging.info(f"[ResultHandler-{worker_id}] Consumer started")
             consumer.consume(callback=self.process_message)
         finally:
             consumer.close()
+
+    def run(self):
+        """Start multiple consumer threads"""
+        threads = []
+        for i in range(2):
+            t = threading.Thread(target=self._worker, args=(i,), daemon=True)
+            t.start()
+            threads.append(t)
+            logging.info(f"[ResultHandler] Started worker thread {i}")
+
+        # Keep the main thread alive
+        for t in threads:
+            t.join()
