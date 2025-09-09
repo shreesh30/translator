@@ -146,9 +146,9 @@ class Utils:
             strict=False  # allow dicts to be converted into dataclasses
         )
 
-        if data.get("type") == "Paragraph":
+        if data.get("type") == Utils.TYPE_PARAGRAPH:
             return from_dict(Paragraph, data, config=config)
-        elif data.get("type") == "Table":
+        elif data.get("type") == Utils.TYPE_TABLE:
             return from_dict(Table, data, config=config)
         else:
             raise ValueError(f"Unknown element type: {data.get('type')}")
