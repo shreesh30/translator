@@ -1,6 +1,7 @@
 import gzip
 import json
 import logging
+import pickle
 import re
 from dataclasses import asdict
 
@@ -326,53 +327,49 @@ class GPUWorker:
         self.model = torch.compile(self.model.eval())
         logger.info("Model initialized successfully")
 
-    def process_message(self,ch, method, properties, body):
-        if self.producer is not None:
-            try:
-                body_str = gzip.decompress(body).decode("utf-8")  # RabbitMQ message body → str
-                task_json = json.loads(body_str)
+    def process_message(self, ch, method, properties, body):
+        if self.producer is None:
+            return
 
-                # Dict → Result dataclass (with nested dataclasses)
-                task = from_dict(Task, task_json, config=Utils.get_config())
+        try:
+            body_decompressed = gzip.decompress(body)
+            task = pickle.loads(body_decompressed)
 
-                # task = pickle.loads(body)
+            if not isinstance(task, Task):
+                raise TypeError(f"Expected Task, got {type(task)}")
 
-                if not isinstance(task, Task):
-                    raise TypeError(f"Expected Task, got {type(task)}")
+            logger.info(f"Received task {task.id}, chunk {task.chunk_index + 1}/{task.total_chunks}")
 
-                logger.info(f"Received task {task.id}, chunk {task.chunk_index + 1}/{task.total_chunks}")
+            element = task.element
 
-                element = task.element
+            if isinstance(element, Paragraph):
+                logger.info('Element instance of Paragraph')
+                self.translate_paragraph(element, task)
+            elif isinstance(element, Table):
+                logger.info('Element instance of Table')
+                self.translate_table(element, task.language_config)
 
-                if isinstance(element, Paragraph):
-                    logger.info('Element instance of Paragraph')
-                    self.translate_paragraph(element, task)
-                elif isinstance(element, Table):
-                    logger.info('Element instance of Table')
-                    self.translate_table(element, task.language_config)
+            result = Result(
+                id=task.id,
+                element=element,
+                language_config=task.language_config,
+                filename=task.filename,
+                chunk_index=task.chunk_index,
+                total_chunks=task.total_chunks,
+                meta_data=task.meta_data
+            )
 
-                result = Result(
-                        id=task.id,
-                        element=element,
-                        language_config=task.language_config,
-                        filename=task.filename,
-                        chunk_index=task.chunk_index,
-                        total_chunks = task.total_chunks,
-                        meta_data= task.meta_data
-                    )
+            result_pickle = pickle.dumps(result)
+            compressed_result = gzip.compress(result_pickle)
+            self.producer.publish(compressed_result, persistent=False)
+            logger.info(f"Published Result: {result.id}")
 
-                result_json = json.dumps(asdict(result)) # type: ignore[arg-type]
-
-                logger.info(f'Publishing Result: {result}')
-                compressed_result = gzip.compress(result_json.encode("utf-8"))
-                self.producer.publish(compressed_result, persistent=False)
-
-                # Acknowledge after processing
-                ch.basic_ack(delivery_tag=method.delivery_tag)
-                logger.info("Message acknowledged")
-            except Exception as e:
-                logger.error(f"Error: {e}", exc_info=True)
-                ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+            # Acknowledge after processing
+            ch.basic_ack(delivery_tag=method.delivery_tag)
+            logger.info("Message acknowledged")
+        except Exception as e:
+            logger.error(f"Error: {e}", exc_info=True)
+            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
 
     def run(self):
         logger.info("[GPUWorker] Starting and loading model...")

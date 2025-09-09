@@ -2,6 +2,7 @@ import gzip
 import json
 import logging
 import os
+import pickle
 import uuid
 from concurrent.futures import as_completed
 from concurrent.futures.thread import ThreadPoolExecutor
@@ -53,9 +54,9 @@ class PDFProcessor:
                 task_id = uuid.uuid4().hex
                 for idx, element in enumerate(elements):
                     task = Task(id=task_id, element = element, language_config=language_config, filename=filename, chunk_index=idx, total_chunks=total_chunks, meta_data=metadata)
-                    task_json = json.dumps(asdict(task)) # type: ignore[arg-type]
-                    logger.info(f'Publishing Task: {task_json}')
-                    compressed_task = gzip.compress(task_json.encode("utf-8"))
+                    task_pickle = pickle.dumps(task)  # serialize dataclass
+                    logger.info(f'Publishing Task: {task.id} chunk {idx + 1}/{total_chunks}')
+                    compressed_task = gzip.compress(task_pickle)  # compress
                     producer.publish(compressed_task, persistent=False)
                     logger.info(f"Queued chunk {idx+1}/{total_chunks} for {filename} in {language_config.get_target_language()} (task_id={task_id})")
         except Exception as e:

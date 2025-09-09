@@ -38,10 +38,9 @@ class ResultHandler:
                 continue
             doc_id = doc_dir.name
             chunks = []
-            for chunk_file in sorted(doc_dir.glob("chunk_*.json")):
-                with open(chunk_file, "r", encoding="utf-8") as f:
-                    result_dict = json.load(f)
-                    result = from_dict(Result, result_dict)
+            for chunk_file in sorted(doc_dir.glob("chunk_*.pkl")):
+                with open(chunk_file, "rb") as f:
+                    result = pickle.load(f)
                     chunks.append(result)
             if chunks:
                 self.documents[doc_id] = chunks
@@ -50,13 +49,13 @@ class ResultHandler:
     def _chunk_path(self, doc_id, chunk_index):
         doc_dir = self.cache_dir / str(doc_id)
         doc_dir.mkdir(parents=True, exist_ok=True)
-        return doc_dir / f"chunk_{chunk_index}.json"
+        return doc_dir / f"chunk_{chunk_index}.pkl"
 
     def _persist_chunk(self, result: Result):
         """Persist each chunk to disk so it's restart-safe"""
         path = self._chunk_path(result.id, result.chunk_index)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(asdict(result), f, ensure_ascii=False) # type: ignore[arg-type]
+        with open(path, "w") as f:
+            pickle.dump(result, f)
 
     def handle_complete_document(self, results):
         """Called in a worker thread when all chunks for a doc are collected."""
@@ -109,11 +108,8 @@ class ResultHandler:
 
     def process_message(self,ch, method, properties, body):
         try:
-            body_str = gzip.decompress(body).decode("utf-8")
-            result_json = json.loads(body_str)
-
-            # Dict → Result dataclass (with nested dataclasses)
-            result = from_dict(Result, result_json, config=Utils.get_config())
+            body_decompressed = gzip.decompress(body)
+            result = pickle.loads(body_decompressed)
 
             if not isinstance(result, Result):
                 raise TypeError(f"Expected Result, got {type(result)}")
