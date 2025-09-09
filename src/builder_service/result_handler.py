@@ -1,3 +1,4 @@
+import gzip
 import json
 import logging
 import os
@@ -108,12 +109,11 @@ class ResultHandler:
 
     def process_message(self,ch, method, properties, body):
         try:
-            # result = pickle.loads(body)
-            body_str = body.decode("utf-8")  # RabbitMQ message body → str
-            result_dict = json.loads(body_str)
+            body_str = gzip.decompress(body).decode("utf-8")
+            result_json = json.loads(body_str)
 
             # Dict → Result dataclass (with nested dataclasses)
-            result = from_dict(Result, result_dict)
+            result = from_dict(Result, result_json)
 
             if not isinstance(result, Result):
                 raise TypeError(f"Expected Result, got {type(result)}")

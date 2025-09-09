@@ -4,15 +4,11 @@ from typing import Optional
 
 @dataclass
 class Element:
-    page_number : int = field(default_factory=int)
     type: Optional[str] = None                  # e.g., "paragraph", "table", etc.
     font_size: float = field(default_factory=float)
 
     def get_type(self):
         return self.type
-
-    def get_page_number(self):
-        return self.page_number
 
     def get_font_size(self):
         pass

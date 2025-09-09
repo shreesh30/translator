@@ -1,3 +1,4 @@
+import gzip
 import json
 import logging
 import pickle
@@ -329,11 +330,11 @@ class GPUWorker:
     def process_message(self,ch, method, properties, body):
         if self.producer is not None:
             try:
-                body_str = body.decode("utf-8")  # RabbitMQ message body → str
-                task_dict = json.loads(body_str)
+                body_str = gzip.decompress(body).decode("utf-8")  # RabbitMQ message body → str
+                task_json = json.loads(body_str)
 
                 # Dict → Result dataclass (with nested dataclasses)
-                task = from_dict(Task, task_dict)
+                task = from_dict(Task, task_json)
 
                 # task = pickle.loads(body)
 
@@ -360,10 +361,10 @@ class GPUWorker:
                     )
 
                 result_json = json.dumps(asdict(result)) # type: ignore[arg-type]
-                # result_body = pickle.dumps(result)
 
                 logger.info(f'Publishing Result: {result}')
-                self.producer.publish(result_json.encode("utf-8"), persistent=False)
+                compressed_result = gzip.compress(result_json.encode("utf-8"))
+                self.producer.publish(compressed_result, persistent=False)
 
                 # Acknowledge after processing
                 ch.basic_ack(delivery_tag=method.delivery_tag)
@@ -380,7 +381,6 @@ class GPUWorker:
 
         self.producer = RabbitMQProducer(host=Utils.KEY_RABBITMQ_HOST, queue=Utils.QUEUE_RESULTS)
         self.producer.connect()
-
 
         self._init_model()
 
