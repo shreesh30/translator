@@ -23,9 +23,10 @@ if __name__ == "__main__":
 
     # --- Clear directories if requested ---
     if args.clear_all:
-        print("Clearing logs and output directories...")
+        print("Clearing logs, output, cache directories...")
         Utils.clear_directory(Utils.LOG_DIR)
         Utils.clear_directory(Utils.OUTPUT_DIR)
+        Utils.clear_directory(Utils.CACHE_DIR)
 
     all_services = [
         {

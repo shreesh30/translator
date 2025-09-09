@@ -24,7 +24,7 @@ class PDFProcessor:
     def process_all_pdfs(self):
         pdf_files = [f for f in os.listdir(Utils.INPUT_DIR) if f.endswith(".pdf")]
 
-        with ThreadPoolExecutor(max_workers=4) as executor:  # adjust workers as needed
+        with ThreadPoolExecutor(max_workers=2) as executor:  # adjust workers as needed
             futures = [
                 executor.submit(self.process_single_pdf, filename)
                 for filename in pdf_files
@@ -57,7 +57,7 @@ class PDFProcessor:
                     task_pickle = pickle.dumps(task)  # serialize dataclass
                     logger.info(f'Publishing Task: {task.id} chunk {idx + 1}/{total_chunks}')
                     compressed_task = gzip.compress(task_pickle)  # compress
-                    producer.publish(compressed_task, persistent=False)
+                    producer.publish(compressed_task)
                     logger.info(f"Queued chunk {idx+1}/{total_chunks} for {filename} in {language_config.get_target_language()} (task_id={task_id})")
         except Exception as e:
             logger.error(f"Error processing {filename}: {e}", exc_info=True)

@@ -361,7 +361,7 @@ class GPUWorker:
 
             result_pickle = pickle.dumps(result)
             compressed_result = gzip.compress(result_pickle)
-            self.producer.publish(compressed_result, persistent=False)
+            self.producer.publish(compressed_result)
             logger.info(f"Published Result: {result.id}")
 
             # Acknowledge after processing
