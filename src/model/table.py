@@ -13,10 +13,10 @@ class Table(Element):
     sub_title: Line = field(default_factory=Line)
     rows: List[Line] = field(default_factory=list)
     columns: List[List[Line]] = field(default_factory=list)
-    page_number: Footer = field(default_factory=Footer)
     chapter: str = field(default_factory=str)
     volume: str = field(default_factory=str)
     content_table: bool = field(default_factory=bool)
+    page_number: Footer = field(default_factory=Footer)
 
     def __post_init__(self):
         self.type = Utils.TYPE_TABLE

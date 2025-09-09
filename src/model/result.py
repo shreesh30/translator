@@ -6,11 +6,11 @@ from src.model.language_config import LanguageConfig
 
 
 @dataclass
-class Task:
+class Result:
     id: str
     element: Element
     filename: str
-    meta_data: DocumentMetadata
     language_config: LanguageConfig
     chunk_index: int
     total_chunks: int
+    meta_data: DocumentMetadata

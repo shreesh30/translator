@@ -10,23 +10,22 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt
 
+from src.model.document_metadata import DocumentMetadata
 from src.model.element import Element
 from src.model.footer import Footer
 from src.model.language_config import LanguageConfig
 from src.model.page import Page
 from src.model.paragraph import Paragraph
 from src.model.table import Table
-from src.service.document_processor import DocumentProcessor
 from src.utils.utils import Utils
 
 logger = logging.getLogger(__name__)
 class DocumentBuilder:
     PAGE_USED = 0
 
-    def __init__(self, language_config: LanguageConfig, document_processor: DocumentProcessor, document: Document):
+    def __init__(self, language_config: LanguageConfig, meta_data: DocumentMetadata, document: Document):
 
-
-        self.document_processor = document_processor
+        self.meta_data = meta_data
         self.language_config = language_config
         self.document = document
         self.font_name = self.language_config.get_target_font_name()
@@ -41,7 +40,7 @@ class DocumentBuilder:
 
     def add_elements(self, elements: List[Element]):
         try:
-            pages = self.document_processor.get_pages()
+            pages = self.meta_data.get_pages()
 
             for element in elements:
                 logger.info(f'Element to Add: {element}')
@@ -146,7 +145,7 @@ class DocumentBuilder:
 
     def add_paragraph(self, element: Paragraph, pages: List[Page]):
         try:
-            _, page_number_start = self.document_processor.get_page_number_info()
+            _, page_number_start = self.meta_data.get_page_number_info()
             header_page_number_start = None
 
             if page_number_start is not None:
@@ -427,7 +426,7 @@ class DocumentBuilder:
         para_format = paragraph_obj.paragraph_format
         left_indent = int(paragraph_data.get_start()) - int(page.get_min_x())
         right_indent = int(page.get_max_x()) - int(paragraph_data.get_end())
-        para_start = self.document_processor.get_paragraph_start()
+        para_start = self.meta_data.get_paragraph_start()
 
         if abs(left_indent - right_indent) > 0:
 
@@ -478,7 +477,7 @@ class DocumentBuilder:
 
     def add_page_numbers(self):
         logger.info('Adding Page Numbers')
-        extracted_page_number, page_number_start = self.document_processor.get_page_number_info()
+        extracted_page_number, page_number_start = self.meta_data.get_page_number_info()
         if extracted_page_number is not None and page_number_start is not None:
             for idx, section in enumerate(self.document.sections):
                 if idx >= page_number_start:

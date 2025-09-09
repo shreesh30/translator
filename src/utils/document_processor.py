@@ -3,7 +3,7 @@ from collections import Counter, defaultdict
 from typing import List, Tuple
 import logging
 import fitz
-
+from src.model.bbox import Bbox
 from src.model.drawing import Drawing
 from src.model.page import Page
 from src.model.paragraph import Paragraph
@@ -73,8 +73,8 @@ class DocumentProcessor:
                 new_para = Paragraph()
                 new_para.set_lines(prev_paragraph.get_lines() + paragraph.get_lines())
                 new_para.set_font_size(prev_paragraph.get_font_size())
-                new_para.set_para_bbox(fitz.Rect(prev_paragraph.get_para_bbox().x0, prev_paragraph.get_para_bbox().y0,
-                                                 paragraph.get_para_bbox().x1, paragraph.get_para_bbox().y1))
+                new_para.set_para_bbox(Bbox(x0=prev_paragraph.get_para_bbox().x0,y0= prev_paragraph.get_para_bbox().y0,
+                                                 x1=paragraph.get_para_bbox().x1,y1= paragraph.get_para_bbox().y1))
                 new_para.set_start(prev_paragraph.get_start())
                 new_para.set_end(paragraph.get_end())
                 new_para.set_page_number(prev_paragraph.get_page_number())
@@ -237,7 +237,7 @@ class DocumentProcessor:
 
     def is_centered(self, element, page_number):
         page = self.pages[page_number]
-        bbox = fitz.Rect()
+        bbox = Bbox(0,0,0,0)
 
         if isinstance(element, Paragraph):
             bbox = element.get_para_bbox()
@@ -358,8 +358,10 @@ class DocumentProcessor:
         new_span.set_font(font)
         new_span.set_font_size(span["size"])
         new_span.set_page_num(page_num)
-        new_span.set_origin(span["origin"])
-        new_span.set_bbox(fitz.Rect(span["bbox"]))
+
+        fitz_bbox = fitz.Rect(span["bbox"])
+        bbox = Bbox(x0=fitz_bbox.x0,x1= fitz_bbox.x1, y0=fitz_bbox.y0,y1= fitz_bbox.y1)
+        new_span.set_bbox(bbox)
 
         return new_span
 
@@ -376,7 +378,6 @@ class DocumentProcessor:
         else:
             self._process_regular_page(pg, page)
 
-
         return pg
 
     @staticmethod
@@ -389,7 +390,8 @@ class DocumentProcessor:
 
         # Process drawings
         for drawing in page.get_drawings():
-            bbox = fitz.Rect(drawing.get("rect"))
+            fitz_bbox = fitz.Rect(drawing.get("rect"))
+            bbox = Bbox(x0=fitz_bbox.x0, x1=fitz_bbox.x1, y0=fitz_bbox.y0, y1=fitz_bbox.y1)
             pg.add_drawings([Drawing(bbox=bbox, page_number=page_num)])
 
         # Set page dimensions
@@ -402,7 +404,10 @@ class DocumentProcessor:
                 continue
             for line in block.get("lines", []):
                 line_obj = Line(page_number=page_num)
-                line_obj.set_line_bbox(fitz.Rect(line.get("bbox")))
+                fitz_bbox = fitz.Rect(line.get("bbox"))
+                bbox = Bbox(x0=fitz_bbox.x0,x1= fitz_bbox.x1,y0= fitz_bbox.y0,y1= fitz_bbox.y1)
+                line_obj.set_line_bbox(bbox)
+
                 for span in line.get("spans", []):
                     new_span = self._parse_span(span, page_num)
                     text = line_obj.get_text().lower() + new_span.get_text().lower()
@@ -416,7 +421,8 @@ class DocumentProcessor:
         for block in blocks:
             for line in block.get("lines",[]):
                 line_text = "".join(span.get("text", "") for span in line.get("spans", []))
-                line_bbox = fitz.Rect(line.get("bbox"))
+                fitz_bbox = fitz.Rect(line.get("bbox"))
+                line_bbox = Bbox(x0=fitz_bbox.x0, x1=fitz_bbox.x1, y0=fitz_bbox.y0, y1=fitz_bbox.y1)
                 font_size = self.get_font_size(line)
 
                 line = TableLine(line_bbox=line_bbox, text=line_text, font_size=font_size)

@@ -5,6 +5,7 @@ from typing import List
 
 import fitz
 
+from src.model.bbox import Bbox
 from src.model.element import Element
 from src.model.footer import Footer
 from src.model.line import Line
@@ -17,7 +18,7 @@ class Paragraph(Element):
     lines: List[Line] = field(default_factory=list)
     footer: List[Footer] = field(default_factory=list)
     font_size: float = field(default_factory=float)
-    para_bbox: fitz.Rect = field(default_factory=lambda: fitz.Rect(0, 0, 0, 0))
+    para_bbox: Bbox = field(default_factory=lambda: Bbox(0, 0, 0, 0))
     start: float = field(default_factory=float)
     end: float = field(default_factory=float)
     sub_paragraphs: List[Paragraph] = field(default_factory=list)

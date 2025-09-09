@@ -1,27 +1,24 @@
 import logging
 import os
 
+from src.ingestion_service.pdf_processor import PDFProcessor
 from src.model.language_config import LanguageConfig
-from src.service.pdf_processor import PDFProcessor
 from src.utils.utils import Utils
 
 
-def run_pdf_processor(lang_configs, input_path):
-    logger = logging.getLogger("ingestion_service")
+def run_pdf_processor(lang_configs):
+    logger = logging.getLogger(Utils.INGESTION_SERVICE)
 
     # Start processing PDFs
-    logger.info("Starting PDF processing with input path: %s", input_path)
+    logger.info("Starting PDF processing with input path: %s", Utils.INPUT_DIR)
     processor = PDFProcessor(
         lang_configs=lang_configs,
-        input_path=input_path,
     )
     processor.process_all_pdfs()
 
 if __name__ == "__main__":
-    Utils.setup_logging("ingestion_service.log")
+    Utils.setup_logging(f"{Utils.INGESTION_SERVICE}.log")
     # input_pdf_path = "resource/input/pdf-complete"  # Replace with your file
-    input_pdf_path = "resource/tmp"               # Replace with your file
-    output_pdf_path = "resource/output"  # Output filename
 
     language_configs = [
         # LanguageConfig(target_language="Odia", target_language_key="ory_Orya",
@@ -42,9 +39,9 @@ if __name__ == "__main__":
         # LanguageConfig(target_language="Malayalam", target_language_key="mal_Mlym",
         #                target_font_path="resource/fonts/MLOT-Karthika_N_Ship.ttf", font_size_multiplier=1.1,
         #                line_spacing_multiplier=1.25),
-        LanguageConfig(target_language="Marathi", target_language_key="mar_Deva",
-                       target_font_path="resource/fonts/Sakal Marathi Normal_Ship.ttf", font_size_multiplier=1.1,
-                       line_spacing_multiplier=1.25),
+        # LanguageConfig(target_language="Marathi", target_language_key="mar_Deva",
+        #                target_font_path="resource/fonts/Sakal Marathi Normal_Ship.ttf", font_size_multiplier=1.1,
+        #                line_spacing_multiplier=1.25),
         # LanguageConfig(target_language="Punjabi", target_language_key="pan_Guru",
         #                target_font_path="resource/fonts/PNOTAmar_N_Ship.ttf", font_size_multiplier=1.1,
         #                line_spacing_multiplier=1.25),
@@ -60,9 +57,12 @@ if __name__ == "__main__":
         # LanguageConfig(target_language="Konkani", target_language_key="gom_Deva",
         #                target_font_path="resource/fonts/SakalBharati_N_Ship.ttf", font_size_multiplier=1.1,
         #                line_spacing_multiplier=1.25),
-        # LanguageConfig(target_language="Maithili", target_language_key="mai_Deva",
-        #                target_font_path="resource/fonts/SakalBharati_N_Ship.ttf", font_size_multiplier=1.1,
-        #                line_spacing_multiplier=1.25),
+        LanguageConfig(target_language="Maithili", target_language_key="mai_Deva",
+                       target_font_path="resource/fonts/SakalBharati_N_Ship.ttf", font_size_multiplier=1.1,
+                       line_spacing_multiplier=1.25),
+        LanguageConfig(target_language="Sindhi", target_language_key="snd_Arab",
+                       target_font_path="resource/fonts/UROT-Ghalib_N_Ship.ttf", font_size_multiplier=1.1,
+                       line_spacing_multiplier=1.25, right_to_left=True)
         # LanguageConfig(target_language="Nepali", target_language_key="npi_Deva",
         #                target_font_path="resource/fonts/SakalBharati_N_Ship.ttf", font_size_multiplier=1.1,
         #                line_spacing_multiplier=1.25),
@@ -87,4 +87,4 @@ if __name__ == "__main__":
 
     ]
 
-    run_pdf_processor(language_configs, input_pdf_path)
+    run_pdf_processor(language_configs)

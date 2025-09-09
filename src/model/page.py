@@ -3,8 +3,7 @@ from dataclasses import dataclass, field
 from typing import List
 import logging
 
-import fitz
-
+from src.model.bbox import Bbox
 from src.model.drawing import Drawing
 from src.model.element import Element
 from src.model.footer import Footer
@@ -30,7 +29,6 @@ class Page:
     max_y:float = field(default_factory=float)
     content_width:float = field(default_factory=float)
     content_height:float = field(default_factory=float)
-    # target_language: str = field(default_factory=str, repr=False)
     extracted_page_number: str = field(default_factory=str)
     line_spacing: int = field(default_factory=int)
     is_content_table: bool = field(default_factory=bool)
@@ -66,7 +64,7 @@ class Page:
             x1 = lines[-1].get_line_bbox().x1
         y1 = lines[-1].get_line_bbox().y1
 
-        para_bbox = fitz.Rect(x0, y0, x1, y1)
+        para_bbox = Bbox(x0=x0,x1=x1,y0=y0,y1=y1)
         font_size = lines[0].get_font_size()
         page_number = self.get_page_number()
 
@@ -195,11 +193,11 @@ class Page:
 
                 current_bbox = line.get_line_bbox()
 
-                updated_bbox = fitz.Rect(
-                    current_line.get_line_bbox().x0,
-                    current_line.get_line_bbox().y0,
-                    current_bbox.x1,
-                    current_bbox.y1
+                updated_bbox = Bbox(
+                    x0=current_line.get_line_bbox().x0,
+                    y0=current_line.get_line_bbox().y0,
+                    x1=current_bbox.x1,
+                    y1=current_bbox.y1
                 )
                 current_line.set_line_bbox(updated_bbox)
                 current_line.set_font_size(max(current_line.font_size, line.get_font_size()))
@@ -345,7 +343,8 @@ class Page:
 
         return new_lines
 
-    def fix_punctuation_spacing(self, lines):
+    @staticmethod
+    def fix_punctuation_spacing(lines):
         for line in lines:
             text = line.get_text()
 
@@ -490,9 +489,9 @@ class Page:
         y0 = lines[0].get_line_bbox().y0
         x1 = lines[-1].get_line_bbox().x1
         y1 = lines[-1].get_line_bbox().y1
-        line_bbox = fitz.Rect(x0, y0, x1, y1)
+        bbox = Bbox(x0=x0,y0=y0,x1=x1,y1=y1)
 
-        line = Line(text=line_text, font_size=font_size, line_bbox=line_bbox)
+        line = Line(text=line_text, font_size=font_size, line_bbox=bbox)
 
         return line
 
@@ -584,7 +583,8 @@ class Page:
             lines = self.group_lines()
             self.fix_punctuation_spacing(lines)
             lines = self.process_lines(lines)
-            self.set_line_spacing(self.find_line_spacing(lines))
+            line_spacing = self.find_line_spacing(lines)
+            self.set_line_spacing(int(line_spacing))
             self.group_by_paragraphs(lines)
             self.compute_content_dimensions()
             self.map_footers_to_paragraphs()
