@@ -8,7 +8,7 @@ from src.model.language_config import LanguageConfig
 @dataclass
 class Task:
     id: str
-    element: Element
+    element: object
     filename: str
     meta_data: DocumentMetadata
     language_config: LanguageConfig

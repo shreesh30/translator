@@ -8,7 +8,7 @@ from src.model.language_config import LanguageConfig
 @dataclass
 class Result:
     id: str
-    element: Element
+    element: object
     filename: str
     language_config: LanguageConfig
     chunk_index: int
