@@ -154,7 +154,7 @@ class ResultHandler:
     def run(self):
         """Start multiple consumer threads"""
         threads = []
-        for i in range(2):
+        for i in range(4):
             t = threading.Thread(target=self._worker, args=(i,), daemon=True)
             t.start()
             threads.append(t)
