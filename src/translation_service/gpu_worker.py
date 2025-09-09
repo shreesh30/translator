@@ -1,7 +1,6 @@
 import gzip
 import json
 import logging
-import pickle
 import re
 from dataclasses import asdict
 
@@ -334,7 +333,7 @@ class GPUWorker:
                 task_json = json.loads(body_str)
 
                 # Dict → Result dataclass (with nested dataclasses)
-                task = from_dict(Task, task_json)
+                task = from_dict(Task, task_json, config=Utils.get_config())
 
                 # task = pickle.loads(body)
 

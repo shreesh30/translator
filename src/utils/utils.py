@@ -5,6 +5,14 @@ import subprocess
 from logging.handlers import RotatingFileHandler
 from string import Template
 
+from dacite import from_dict, Config
+
+from src.model.bbox import Bbox
+from src.model.footer import Footer
+from src.model.line import Line
+from src.model.paragraph import Paragraph
+from src.model.table import Table
+
 
 class Utils:
     TAGS = {'[123]': '<b>', '[456]': '</b>'}
@@ -41,6 +49,7 @@ class Utils:
     # INPUT_DIR = 'resource/tmp'
     INPUT_DIR = "resource/input/pdf-complete"
     CACHE_DIR = '/var/cache/translator'
+
 
     @staticmethod
     def setup_logging(log_file_name: str, max_bytes=10 * 1024 * 1024, backup_count=5):
@@ -122,3 +131,34 @@ class Utils:
                 os.remove(service_file)
         except Exception as e:
             print(f"Failed to stop/delete {service_name}: {e}")
+
+    @staticmethod
+    def get_cast_classes():
+        cast_classes = [Paragraph, Table, Line, Footer, Bbox]
+        return cast_classes
+
+    @staticmethod
+    def element_factory(data: dict):
+        cast_classes = Utils.get_cast_classes()
+
+        config = Config(
+            cast=cast_classes,
+            strict=False  # allow dicts to be converted into dataclasses
+        )
+
+        if data.get("type") == "Paragraph":
+            return from_dict(Paragraph, data, config=config)
+        elif data.get("type") == "Table":
+            return from_dict(Table, data, config=config)
+        else:
+            raise ValueError(f"Unknown element type: {data.get('type')}")
+
+    @staticmethod
+    def get_config():
+        config = Config(
+            cast=[Paragraph, Table, Line, Footer, Bbox],
+            type_hooks={object: Utils.element_factory},
+            strict=False
+        )
+
+        return config

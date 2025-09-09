@@ -113,7 +113,7 @@ class ResultHandler:
             result_json = json.loads(body_str)
 
             # Dict → Result dataclass (with nested dataclasses)
-            result = from_dict(Result, result_json)
+            result = from_dict(Result, result_json, config=Utils.get_config())
 
             if not isinstance(result, Result):
                 raise TypeError(f"Expected Result, got {type(result)}")
