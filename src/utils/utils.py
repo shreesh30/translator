@@ -137,8 +137,9 @@ class Utils:
         cast_classes = [Paragraph, Table, Line, Footer, Bbox]
         return cast_classes
 
-    def element_factory(self,data: dict):
-        cast_classes = self.get_cast_classes()
+    @staticmethod
+    def element_factory(data: dict):
+        cast_classes = Utils.get_cast_classes()
 
         config = Config(
             cast=cast_classes,
@@ -152,10 +153,11 @@ class Utils:
         else:
             raise ValueError(f"Unknown element type: {data.get('type')}")
 
-    def get_config(self):
+    @staticmethod
+    def get_config():
         config = Config(
             cast=[Paragraph, Table, Line, Footer, Bbox],
-            type_hooks={object: self.element_factory},
+            type_hooks={object: Utils.element_factory},
             strict=False
         )
 

@@ -9,7 +9,7 @@ from src.model.bbox import Bbox
 from src.model.element import Element
 from src.model.footer import Footer
 from src.model.line import Line
-from src.utils.utils import Utils
+
 
 
 @dataclass
@@ -27,6 +27,8 @@ class Paragraph:
     type: str = field(default_factory=str)
 
     def __post_init__(self):
+        from src.utils.utils import Utils
+
         self.type = Utils.TYPE_PARAGRAPH
 
     def set_lines(self, lines):

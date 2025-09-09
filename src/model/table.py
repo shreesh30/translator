@@ -4,7 +4,7 @@ from typing import List
 from src.model.element import Element
 from src.model.footer import Footer
 from src.model.line import Line
-from src.utils.utils import Utils
+
 
 
 @dataclass
@@ -21,6 +21,7 @@ class Table:
     font_size: float = field(default_factory=float)
 
     def __post_init__(self):
+        from src.utils.utils import Utils
         self.type = Utils.TYPE_TABLE
 
     def set_title(self, title):
