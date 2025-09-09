@@ -46,6 +46,7 @@ class RabbitMQConsumer:
                 return
             except Exception as e:
                 logging.error(f"[Consumer] Connection failed: {e}. Retrying in 5s...")
+                self.close()
                 time.sleep(5)
 
     def consume(self, callback, auto_ack=False):

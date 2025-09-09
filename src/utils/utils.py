@@ -115,7 +115,6 @@ class Utils:
     @staticmethod
     def install_service(service_name):
         subprocess.run(["systemctl", "daemon-reload"], check=True)
-        subprocess.run(["systemctl", "enable", service_name], check=True)
         subprocess.run(["systemctl", "start", service_name], check=True)
         print(f"Service '{service_name}' installed and started.")
 
