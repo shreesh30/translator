@@ -54,7 +54,7 @@ class ResultHandler:
     def _persist_chunk(self, result: Result):
         """Persist each chunk to disk so it's restart-safe"""
         path = self._chunk_path(result.id, result.chunk_index)
-        with open(path, "w") as f:
+        with open(path, "wb") as f:
             pickle.dump(result, f)
 
     def handle_complete_document(self, results):
