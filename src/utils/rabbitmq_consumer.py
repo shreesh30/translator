@@ -40,7 +40,7 @@ class RabbitMQConsumer:
                 logging.info(f"[Consumer] Connected to RabbitMQ at {self.host}")
 
                 # Start heartbeat thread
-                if self.heartbeat_thread is None:
+                if not self.heartbeat_thread or not self.heartbeat_thread.is_alive():
                     self.heartbeat_thread = HeartbeatThread(self.connection)
                     self.heartbeat_thread.start()
                 return
@@ -70,19 +70,29 @@ class RabbitMQConsumer:
 
                 self.channel.start_consuming()
 
-            except AMQPConnectionError as e:
+            except (AMQPConnectionError, pika.exceptions.StreamLostError) as e:
                 logging.error(f"[Consumer] Lost connection: {e}, reconnecting...")
+                self.close()
                 time.sleep(5)
             except Exception as e:
                 logging.error(f"[Consumer] Unexpected error: {e}, reconnecting...")
+                self.close()
                 time.sleep(5)
 
     def close(self):
         """
         Closes the connection to RabbitMQ.
         """
-        if self.heartbeat_thread:
-            self.heartbeat_thread.stop()
-        if self.connection and self.connection.is_open:
-            self.connection.close()
-            logging.info("[Consumer] Connection closed")
+        try:
+            if self.heartbeat_thread:
+                self.heartbeat_thread.stop()
+                self.heartbeat_thread = None
+                logging.info("[Consumer] Hearetbeat thread stopped")
+            if self.channel and self.channel.is_open:
+                self.channel.close()
+                logging.info("[Consumer] Channel closed")
+            if self.connection and self.connection.is_open:
+                self.connection.close()
+                logging.info("[Consumer] Connection closed")
+        except Exception as e:
+            logging.error(f"[Consumer] Error while closing: {e}", exc_info=True)
