@@ -33,18 +33,35 @@ class ResultHandler:
 
     def _rebuild_from_disk(self):
         """On startup, reload incomplete docs from disk"""
+        logger.info(f"[ResultHandler] Rebuilding state from disk: {self.cache_dir}")
+
+        if not self.cache_dir.exists():
+            logger.warning(f"[ResultHandler] Cache dir {self.cache_dir} does not exist. Nothing to rebuild.")
+            return
+
         for doc_dir in self.cache_dir.iterdir():
             if not doc_dir.is_dir():
+                logger.debug(f"[ResultHandler] Skipping non-directory entry: {doc_dir}")
                 continue
+
             doc_id = doc_dir.name
+            logger.info(f"[ResultHandler] Processing cached document {doc_id}")
+
             chunks = []
             for chunk_file in sorted(doc_dir.glob("chunk_*.pkl")):
-                with open(chunk_file, "rb") as f:
-                    result = pickle.load(f)
-                    chunks.append(result)
+                try:
+                    with open(chunk_file, "rb") as f:
+                        result = pickle.load(f)
+                        chunks.append(result)
+                    logger.debug(f"[ResultHandler] Loaded chunk {chunk_file.name} for doc {doc_id}")
+                except Exception as e:
+                    logger.error(f"[ResultHandler] Failed to load {chunk_file} for doc {doc_id}: {e}", exc_info=True)
+
             if chunks:
                 self.documents[doc_id] = chunks
                 logger.info(f"[ResultHandler] Rebuilt {len(chunks)} chunks for doc {doc_id}")
+            else:
+                logger.warning(f"[ResultHandler] No valid chunks found for doc {doc_id}")
 
     def _chunk_path(self, doc_id, chunk_index):
         doc_dir = self.cache_dir / str(doc_id)
