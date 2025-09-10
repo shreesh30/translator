@@ -32,7 +32,7 @@ class ResultHandler:
         self._rebuild_from_disk()
 
     def _rebuild_from_disk(self):
-        """On startup, reload incomplete docs from disk"""
+        """On startup, reload incomplete docs from disk using paths only"""
         logger.info(f"[ResultHandler] Rebuilding state from disk: {self.cache_dir}")
 
         if not self.cache_dir.exists():
@@ -47,19 +47,17 @@ class ResultHandler:
             doc_id = doc_dir.name
             logger.info(f"[ResultHandler] Processing cached document {doc_id}")
 
-            chunks = []
+            chunk_paths = []
             for chunk_file in sorted(doc_dir.glob("chunk_*.pkl")):
-                try:
-                    with open(chunk_file, "rb") as f:
-                        result = pickle.load(f)
-                        chunks.append(result)
-                    logger.debug(f"[ResultHandler] Loaded chunk {chunk_file.name} for doc {doc_id}")
-                except Exception as e:
-                    logger.error(f"[ResultHandler] Failed to load {chunk_file} for doc {doc_id}: {e}", exc_info=True)
+                if chunk_file.is_file():
+                    chunk_paths.append(str(chunk_file))
+                    logger.debug(f"[ResultHandler] Found chunk {chunk_file.name} for doc {doc_id}")
+                else:
+                    logger.warning(f"[ResultHandler] Skipping invalid entry {chunk_file} in {doc_dir}")
 
-            if chunks:
-                self.documents[doc_id] = chunks
-                logger.info(f"[ResultHandler] Rebuilt {len(chunks)} chunks for doc {doc_id}")
+            if chunk_paths:
+                self.documents[doc_id] = chunk_paths
+                logger.info(f"[ResultHandler] Rebuilt {len(chunk_paths)} chunks for doc {doc_id}")
             else:
                 logger.warning(f"[ResultHandler] No valid chunks found for doc {doc_id}")
 
@@ -73,25 +71,30 @@ class ResultHandler:
         path = self._chunk_path(result.id, result.chunk_index)
         with open(path, "wb") as f:
             pickle.dump(result, f)
+        return str(path)
 
-    def handle_complete_document(self, results):
+    def handle_complete_document(self, doc_id, chunk_paths):
         """Called in a worker thread when all chunks for a doc are collected."""
-        if not results:
+        if not chunk_paths:
             return
 
-        # Sort chunks by index
-        results.sort(key=lambda r: r.chunk_index)
-
-        doc_id = results[-1].id
-
         logger.info(
-            f"[ResultHandler] Finalizing document {doc_id} with {len(results)} chunks "
+            f"[ResultHandler] Finalizing document {doc_id} with {len(chunk_paths)} chunks "
             f"(thread: {threading.current_thread().name})"
         )
+
         try:
-            language_config= results[-1].language_config
+            # Load chunks back from disk, sort by index
+            results = []
+            for chunk_file in sorted(chunk_paths, key=lambda p: int(Path(p).stem.split("_")[1])):
+                with open(chunk_file, "rb") as f:
+                    result = pickle.load(f)
+                    results.append(result)
+
+            # Extract final info from last chunk
+            language_config = results[-1].language_config
             meta_data = results[-1].meta_data
-            elements = [result.element for result in results]
+            elements = [r.element for r in results]
             file_name = results[-1].filename
             language = language_config.target_language
 
@@ -113,13 +116,12 @@ class ResultHandler:
             doc.save(str(save_path))
             logger.info(f"Saved {language} version of {file_name}")
 
-            # If done successfully, cleanup from disk
-
-            doc_dir = self.cache_dir / str(results[-1].id)
+            # Cleanup temp files
+            doc_dir = self.cache_dir / str(doc_id)
             if doc_dir.exists():
                 shutil.rmtree(doc_dir, ignore_errors=True)
-
             logger.info(f"[ResultHandler] Cleaned up temporary files for document {doc_id}")
+
         except Exception as e:
             logger.error(f"[ResultHandler] Error writing document {doc_id}: {e}", exc_info=True)
 
@@ -134,21 +136,21 @@ class ResultHandler:
             logger.info(f"[Consumer] Received result {result.id}, chunk {result.chunk_index + 1}/{result.total_chunks}")
 
             # Persist chunk
-            self._persist_chunk(result)
+            chunk_path = self._persist_chunk(result)
 
             with self.lock:
                 if result.id not in self.documents:
-                    self.documents[result.id] = [result]
+                    self.documents[result.id] = [chunk_path]
                 else:
-                    self.documents[result.id].append(result)
+                    self.documents[result.id].append(chunk_path)
 
                 # Check if document is complete
                 if len(self.documents[result.id]) == result.total_chunks:
                     logger.info(f"[ResultHandler] All chunks received for {result.id}")
-                    results = self.documents.pop(result.id)
+                    chunk_paths = self.documents.pop(result.id)
                     # Submit processing to thread pool
                     # self.executor.submit(self.handle_complete_document, results)
-                    self.handle_complete_document(results)
+                    self.handle_complete_document(result.id, chunk_paths)
 
                 # Acknowledge while still holding the lock
                 ch.basic_ack(delivery_tag=method.delivery_tag)
