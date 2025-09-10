@@ -34,7 +34,7 @@ class DocumentBuilder:
     def build_document(self, elements: List[Element]):
         try:
             self.add_elements(elements)
-            self.add_page_numbers()
+            # self.add_page_numbers()
         except Exception as e:
             logger.error(f'Error while building document: {elements}: {e}')
 

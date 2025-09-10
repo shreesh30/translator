@@ -84,29 +84,38 @@ class ResultHandler:
         )
 
         try:
-            # Load chunks back from disk, sort by index
-            results = []
-            for chunk_file in sorted(chunk_paths, key=lambda p: int(Path(p).stem.split("_")[1])):
+            # Sort chunk paths by index
+            sorted_paths = sorted(chunk_paths, key=lambda p: int(Path(p).stem.split("_")[1]))
+
+            language_config = None
+            meta_data = None
+            file_name = None
+
+            # Create empty doc + builder
+            doc = Document()
+            builder = None
+
+            for chunk_file in sorted_paths:
                 with open(chunk_file, "rb") as f:
                     result = pickle.load(f)
-                    results.append(result)
 
-            # Extract final info from last chunk
-            language_config = results[-1].language_config
-            meta_data = results[-1].meta_data
-            elements = [r.element for r in results]
-            file_name = results[-1].filename
+                if language_config is None:  # only set once
+                    language_config = result.language_config
+                    meta_data = result.meta_data
+                    file_name = result.filename
+                    builder = DocumentBuilder(
+                        document=doc,
+                        language_config=language_config,
+                        meta_data=meta_data
+                    )
+
+                # Add element directly (don’t keep in memory)
+                builder.build_document([result.element])
+
+            if builder is not None:
+                builder.add_page_numbers()
+
             language = language_config.target_language
-
-            # Build the translated document
-            doc = Document()
-            builder = DocumentBuilder(
-                document=doc,
-                language_config=language_config,
-                meta_data=meta_data
-            )
-            builder.build_document(elements)
-
             target_dir = os.path.join(Utils.OUTPUT_DIR, language)
             os.makedirs(target_dir, exist_ok=True)
 
