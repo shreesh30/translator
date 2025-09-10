@@ -23,7 +23,7 @@ class RabbitMQConsumer:
         self.prefetch_count = prefetch_count
         self.connection = None
         self.channel = None
-        self.heartbeat_thread = None
+        # self.heartbeat_thread = None
 
     def connect(self):
         """
@@ -40,9 +40,9 @@ class RabbitMQConsumer:
                 logging.info(f"[Consumer] Connected to RabbitMQ at {self.host}")
 
                 # Start heartbeat thread
-                if not self.heartbeat_thread or not self.heartbeat_thread.is_alive():
-                    self.heartbeat_thread = HeartbeatThread(self.connection)
-                    self.heartbeat_thread.start()
+                # if not self.heartbeat_thread or not self.heartbeat_thread.is_alive():
+                #     self.heartbeat_thread = HeartbeatThread(self.connection)
+                #     self.heartbeat_thread.start()
                 return
             except Exception as e:
                 logging.error(f"[Consumer] Connection failed: {e}. Retrying in 5s...")
@@ -73,21 +73,21 @@ class RabbitMQConsumer:
             except (AMQPConnectionError, pika.exceptions.StreamLostError) as e:
                 logging.error(f"[Consumer] Lost connection: {e}, reconnecting...")
                 self.close()
-                time.sleep(5)
+                time.sleep(3)
             except Exception as e:
                 logging.error(f"[Consumer] Unexpected error: {e}, reconnecting...")
                 self.close()
-                time.sleep(5)
+                time.sleep(3)
 
     def close(self):
         """
         Closes the connection to RabbitMQ.
         """
         try:
-            if self.heartbeat_thread:
-                self.heartbeat_thread.stop()
-                self.heartbeat_thread = None
-                logging.info("[Consumer] Hearetbeat thread stopped")
+            # if self.heartbeat_thread:
+            #     self.heartbeat_thread.stop()
+            #     self.heartbeat_thread = None
+            #     logging.info("[Consumer] Hearetbeat thread stopped")
             if self.channel and self.channel.is_open:
                 self.channel.close()
                 logging.info("[Consumer] Channel closed")

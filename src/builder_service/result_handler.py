@@ -125,9 +125,6 @@ class ResultHandler:
                 else:
                     self.documents[result.id].append(result)
 
-                ch.basic_ack(delivery_tag=method.delivery_tag)
-                logging.info("[Consumer] Message acknowledged")
-
                 # Check if document is complete
                 if len(self.documents[result.id]) == result.total_chunks:
                     logger.info(f"[ResultHandler] All chunks received for {result.id}")
@@ -135,6 +132,10 @@ class ResultHandler:
                     # Submit processing to thread pool
                     # self.executor.submit(self.handle_complete_document, results)
                     self.handle_complete_document(results)
+
+                # Acknowledge while still holding the lock
+                ch.basic_ack(delivery_tag=method.delivery_tag)
+                logging.info("[Consumer] Message acknowledged")
         except Exception as e:
             logger.error(f"[ResultHandler] Error: {e}", exc_info=True)
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
