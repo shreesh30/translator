@@ -96,3 +96,6 @@ class RabbitMQConsumer:
                 logging.info("[Consumer] Connection closed")
         except Exception as e:
             logging.error(f"[Consumer] Error while closing: {e}", exc_info=True)
+        finally:
+            self.channel = None
+            self.connection = None
