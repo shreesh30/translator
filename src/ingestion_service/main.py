@@ -21,9 +21,12 @@ if __name__ == "__main__":
     # input_pdf_path = "resource/input/pdf-complete"  # Replace with your file
 
     language_configs = [
-        # LanguageConfig(target_language="Odia", target_language_key="ory_Orya",
-        #                target_font_path="resource/fonts/SakalBharati_N_Ship.ttf", font_size_multiplier=1.1,
-        #                line_spacing_multiplier=1.25),
+        LanguageConfig(target_language="Odia", target_language_key="ory_Orya",
+                       target_font_path="resource/fonts/SakalBharati_N_Ship.ttf", font_size_multiplier=1.1,
+                       line_spacing_multiplier=1.25),
+        LanguageConfig(target_language="Telugu", target_language_key="tel_Telu",
+                       target_font_path="resource/fonts/SakalBharati_N_Ship.ttf", font_size_multiplier=1.1,
+                       line_spacing_multiplier=1.25)
         # LanguageConfig(target_language="Bengali", target_language_key="ben_Beng",
         #                target_font_path="resource/fonts/bnotdurga_n_ship.ttf", font_size_multiplier=1.1,
         #                line_spacing_multiplier=1.25),
@@ -57,9 +60,9 @@ if __name__ == "__main__":
         # LanguageConfig(target_language="Konkani", target_language_key="gom_Deva",
         #                target_font_path="resource/fonts/SakalBharati_N_Ship.ttf", font_size_multiplier=1.1,
         #                line_spacing_multiplier=1.25),
-        LanguageConfig(target_language="Maithili", target_language_key="mai_Deva",
-                       target_font_path="resource/fonts/SakalBharati_N_Ship.ttf", font_size_multiplier=1.1,
-                       line_spacing_multiplier=1.25)
+        # LanguageConfig(target_language="Maithili", target_language_key="mai_Deva",
+        #                target_font_path="resource/fonts/SakalBharati_N_Ship.ttf", font_size_multiplier=1.1,
+        #                line_spacing_multiplier=1.25)
         # LanguageConfig(target_language="Sindhi", target_language_key="snd_Arab",
         #                target_font_path="resource/fonts/UROT-Ghalib_N_Ship.ttf", font_size_multiplier=1.1,
         #                line_spacing_multiplier=1.25, right_to_left=True)
@@ -73,9 +76,6 @@ if __name__ == "__main__":
         #                target_font_path="resource/fonts/SakalBharati_N_Ship.ttf", font_size_multiplier=1.1,
         #                line_spacing_multiplier=1.25),
         # LanguageConfig(target_language="Tamil", target_language_key="tam_Taml",
-        #                target_font_path="resource/fonts/SakalBharati_N_Ship.ttf", font_size_multiplier=1.1,
-        #                line_spacing_multiplier=1.25),
-        # LanguageConfig(target_language="Telugu", target_language_key="tel_Telu",
         #                target_font_path="resource/fonts/SakalBharati_N_Ship.ttf", font_size_multiplier=1.1,
         #                line_spacing_multiplier=1.25),
         # LanguageConfig(target_language="Urdu", target_language_key="urd_Arab",
