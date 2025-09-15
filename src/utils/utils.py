@@ -31,7 +31,7 @@ class Utils:
     # RABBITMQ USER & PASSWORD
     KEY_USER = 'admin'
     KEY_PASSWORD = 'admin'
-    KEY_RABBITMQ_HOST = '172.31.31.221'
+    KEY_RABBITMQ_HOST = '172.31.19.34'
     KEY_RABBITMQ_LOCALHOST = 'localhost'
 
     # RABBITMQ Keys
