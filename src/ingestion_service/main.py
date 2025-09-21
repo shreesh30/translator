@@ -33,9 +33,9 @@ if __name__ == "__main__":
         # LanguageConfig(target_language="Hindi", target_language_key="hin_Deva",
         #                target_font_path="resource/fonts/DVOTSurekh_N_Ship.ttf", font_size_multiplier=1.1,
         #                line_spacing_multiplier=1.25),
-        # LanguageConfig(target_language="Dogri", target_language_key="doi_Deva",
-        #                target_font_path="resource/fonts/SakalBharati_N_Ship.ttf", font_size_multiplier=1.1,
-        #                line_spacing_multiplier=1.25),
+        LanguageConfig(target_language="Dogri", target_language_key="doi_Deva",
+                       target_font_path="resource/fonts/SakalBharati_N_Ship.ttf", font_size_multiplier=1.1,
+                       line_spacing_multiplier=1.25),
         # LanguageConfig(target_language="Gujarati", target_language_key="guj_Gujr",
         #                target_font_path="resource/fonts/GJOTAvantika_N_Ship.ttf", font_size_multiplier=1.1,
         #                line_spacing_multiplier=1.25),
@@ -57,18 +57,18 @@ if __name__ == "__main__":
         # LanguageConfig(target_language="Bodo", target_language_key="brx_Deva",
         #                target_font_path="resource/fonts/SakalBharati_N_Ship.ttf", font_size_multiplier=1.1,
         #                line_spacing_multiplier=1.25),
-        LanguageConfig(target_language="Konkani", target_language_key="gom_Deva",
-                       target_font_path="resource/fonts/SakalBharati_N_Ship.ttf", font_size_multiplier=1.1,
-                       line_spacing_multiplier=1.25),
+        # LanguageConfig(target_language="Konkani", target_language_key="gom_Deva",
+        #                target_font_path="resource/fonts/SakalBharati_N_Ship.ttf", font_size_multiplier=1.1,
+        #                line_spacing_multiplier=1.25),
         # LanguageConfig(target_language="Maithili", target_language_key="mai_Deva",
         #                target_font_path="resource/fonts/SakalBharati_N_Ship.ttf", font_size_multiplier=1.1,
         #                line_spacing_multiplier=1.25)
         # LanguageConfig(target_language="Sindhi", target_language_key="snd_Arab",
         #                target_font_path="resource/fonts/UROT-Ghalib_N_Ship.ttf", font_size_multiplier=1.1,
         #                line_spacing_multiplier=1.25, right_to_left=True)
-        LanguageConfig(target_language="Nepali", target_language_key="npi_Deva",
-                       target_font_path="resource/fonts/SakalBharati_N_Ship.ttf", font_size_multiplier=1.1,
-                       line_spacing_multiplier=1.25)
+        # LanguageConfig(target_language="Nepali", target_language_key="npi_Deva",
+        #                target_font_path="resource/fonts/SakalBharati_N_Ship.ttf", font_size_multiplier=1.1,
+        #                line_spacing_multiplier=1.25)
         # LanguageConfig(target_language="Sanskrit", target_language_key="san_Deva",
         #                target_font_path="resource/fonts/SakalBharati_N_Ship.ttf", font_size_multiplier=1.1,
         #                line_spacing_multiplier=1.25),
@@ -81,9 +81,9 @@ if __name__ == "__main__":
         # LanguageConfig(target_language="Urdu", target_language_key="urd_Arab",
         #                target_font_path="resource/fonts/UROT-Ghalib_N_Ship.ttf", font_size_multiplier=1.1,
         #                line_spacing_multiplier=1.25, right_to_left=True),
-        # LanguageConfig(target_language="Kashmiri", target_language_key="kas_Arab",
-        #                target_font_path="resource/fonts/UROT-Ghalib_N_Ship.ttf", font_size_multiplier=1.1,
-        #                line_spacing_multiplier=1.25, right_to_left=True)
+        LanguageConfig(target_language="Kashmiri", target_language_key="kas_Arab",
+                       target_font_path="resource/fonts/UROT-Ghalib_N_Ship.ttf", font_size_multiplier=1.1,
+                       line_spacing_multiplier=1.25, right_to_left=True)
 
     ]
 
